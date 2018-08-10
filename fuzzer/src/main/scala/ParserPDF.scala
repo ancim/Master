@@ -24,19 +24,22 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       if(num>=0 && num<10) 1+help
       else numberOfDigitsTailRecursive(num/10, help+1)
     }
-    val numberOfDigits = numberOfDigitsTailRecursive(number, 0)
-    numberOfDigits match {
-      case 1 => 1
-      case 2 => Random.nextInt(number/3)
-      case 3 => Random.nextInt(number/6)
-      case 4 => Random.nextInt(number/50)
-      case 5 => Random.nextInt(number/300)
-      case 6 => Random.nextInt(number/3000)
-      case 7 => Random.nextInt(number/8000)
-      case 8 => Random.nextInt(number/60000)
-      case 9 => Random.nextInt(number/2000000)
-      case _ => println("Vise od 9 cifara?"); 1
-    }
+    if(number == 0) 0
+      else {
+        val numberOfDigits = numberOfDigitsTailRecursive(number, 0)
+        numberOfDigits match {
+          case 1 => 1
+          case 2 => Random.nextInt(number / 3)
+          case 3 => Random.nextInt(number / 6)
+          case 4 => Random.nextInt(number / 50)
+          case 5 => Random.nextInt(number / 300)
+          case 6 => Random.nextInt(number / 3000)
+          case 7 => Random.nextInt(number / 8000)
+          case 8 => Random.nextInt(number / 60000)
+          case 9 => Random.nextInt(number / 2000000)
+          case _ => println("Vise od 9 cifara?"); 1
+        }
+      }
   }
 
   /* Funkcija koja generise stringove u formatu <...> */
@@ -110,7 +113,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
   }
 
   def generateMethod(): String = {
-    getHeuristicString("commonNames.txt\\commonMethodNames.txt")
+    getHeuristicString("commonNames\\commonMethodNames.txt")
   }
 
   def getHeuristicString(fileName: String): String = {
@@ -158,13 +161,13 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       // pretvaramo ga u bajtove
       val streamInBytes = stream.getBytes(Charset.forName("ISO-8859-1"));
       val streamBytesSize = streamInBytes.size
-      val numberOfChanges = Random.nextInt(2)
+      val numberOfChanges = Random.nextInt(2) //?!
       println("\t\t ---- Broj parcica koje menjam: " + numberOfChanges)
       println("\t\t ---- Pre izmena velicina bajtova je: " + streamBytesSize)
       /* pravimo promene onoliko puta kolika je vrednost promenljive numberOfChanges*/
       for(i <- 0 until numberOfChanges) {
         /* odredjujemo velicinu novog niza bajtova: gledamo da bude neko manje parce */
-        val smallChunk = streamBytesSize / 50
+        val smallChunk = getAPiece(streamBytesSize)
         println("\t\t ------------ (streamBytesSize/50): " + smallChunk)
         if (smallChunk != 0) {
           val newBytesSize = Random.nextInt(smallChunk)
@@ -215,11 +218,11 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     val matchStringsMap = stringPattern.findAllMatchIn(deleteStreams).map(_.start).toList
     val numberOfStrings = matchStrings.size
     println("Ukupno ima: " + numberOfStrings + " stringova, ")
-    var percentOfChange = numberOfStrings/10;
+    var percentOfChange = getAPiece(numberOfStrings);
     var numberOfChanged = 0
     var indexes = scala.collection.mutable.ArrayBuffer.empty[Tuple3[Int, Int, String]]
     if(percentOfChange != 0) {
-       numberOfChanged = Random.nextInt(percentOfChange+1)
+       numberOfChanged = percentOfChange//Random.nextInt(percentOfChange+1)
        println("\ta mi biramo da promenimo: " + numberOfChanged)
       var newElems = new Array[Int](numberOfChanged)
        for(i <- 0 until numberOfChanged){
@@ -241,10 +244,10 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     val matchNumbersMap = numberPattern.findAllMatchIn(deleteStreams).map(_.start).toList
     val numberOfNumbers = matchNumbers.size
     println("Ukupno ima: " + numberOfNumbers + " brojeva, ")
-    percentOfChange = numberOfNumbers/100;
+    percentOfChange = getAPiece(numberOfNumbers);
     numberOfChanged = 0
     if(percentOfChange != 0) {
-      numberOfChanged = Random.nextInt(percentOfChange+1)
+      numberOfChanged = percentOfChange//Random.nextInt(percentOfChange+1)
       println("\ta mi biramo da promenimo: " + numberOfChanged)
       var newElems = new Array[Int](numberOfChanged)
       for(i <- 0 until numberOfChanged){
@@ -265,10 +268,10 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     val matchMethodsMap = methodPattern.findAllMatchIn(deleteStreams).map(_.start).toList
     val numberOfMethods = matchMethods.size // //
     println("Ukupno ima: " + numberOfMethods + " metoda, ") //
-    percentOfChange = numberOfMethods/10; //
+    percentOfChange = getAPiece(numberOfMethods); //
     numberOfChanged = 0
     if(percentOfChange != 0) {
-      numberOfChanged = Random.nextInt(percentOfChange+1)
+      numberOfChanged = percentOfChange//Random.nextInt(percentOfChange+1)
       println("\ta mi biramo da promenimo: " + numberOfChanged)
       var newElems = new Array[Int](numberOfChanged)
       for(i <- 0 until numberOfChanged){
@@ -306,6 +309,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     var prevousElement: Tuple3[Int, Int, String] = null;
     var dataChanged = 0;
     var nextStream = 0;
+    var streamsChanged = 0;
     for(i <- 0 until indexes.size) {
       println("i je " + i)
       var element = indexes(i);
@@ -316,8 +320,10 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       if(replacement == null){
         //println("replacement je null: " + replacement)
         val currentStream = matchStreams(nextStream).toString()
-        if(Random.nextInt(20)>=18)
+        if(Random.nextInt(20)>=18){
           replacement = changeStream(currentStream)
+          streamsChanged+=1;
+        }
         else {
           replacement = new String(currentStream);
           dataChanged-=1
@@ -336,8 +342,8 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       }
     }
     newContent.append(deleteStreams.substring(beginIndex))
-
-    println("\t ----------- Ukupno promenjeno: " + dataChanged + " podataka.")
+    println("\t\t a biramo da menjamo: " + streamsChanged + " streamova")
+    println("\t ----------- Ukupno promenjeno: " + dataChanged + " podataka od " + indexes.size + " podataka.")
     /* zapisujemo novi fajl */
     var newContentFile: String = ".\\fuzzedPDFcorpus\\" + actorNumber.toString +"_fuzzed.pdf";
     //var newContentFile = new File(newContentName);
