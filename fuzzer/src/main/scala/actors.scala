@@ -30,6 +30,27 @@ object actors {
   /* svi podaci o izvrsavanju programa se upisuju u datoteku odgovarajuceg naziva */
 def writeToFile(number: Int, out: List[String], err: List[String], exitCode : Int, destroyedManually : Boolean) {
   /* naziv datoteke se pravi na osnovu broja Actor-a, i na osnovu toga da li je doslo do greske (postoje podaci u stderr) */
+  /* ovo dodajem da ne bi ispisivao rezultate procesa koji nisu uzrokovali gresku pdf citaca */
+  if(err.isEmpty && destroyedManually){
+    /* posto nije doslo do greske, brisemo izmenjeni pdf iz foldera fuzzedPDFcorpus */
+    import java.io.IOException
+    import java.nio.file.DirectoryNotEmptyException
+    import java.nio.file.Files
+    import java.nio.file.NoSuchFileException
+    val path = Paths.get(".\\fuzzedPDFcorpus\\" + number + "_fuzzed.pdf");
+    try
+      Files.delete(path)
+    catch {
+      case x: NoSuchFileException =>
+        System.err.format("%s: no such" + " file or directory%n", path)
+      case x: DirectoryNotEmptyException =>
+        System.err.format("%s not empty%n", path)
+      case x: IOException =>
+        // File permission problems are caught here.
+        System.err.println(x)
+    }
+    return;
+  }
   var fileName = ".\\results\\";
   if (!err.isEmpty)
     fileName = fileName + "ERR_";
@@ -154,7 +175,7 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
     /* broj zavrsenih PDF citanja i broj Actor-a */
     var numberOfTerminations = 0;
     /* za sad je MAX broj actor-a 20 */
-    val numberOfActors = 20;
+    val numberOfActors = 5;
     /* broj zeljenih .pdf fajlova koje zelimo ukupno da testiramo */
     val numberOfFiles = 0;
 
@@ -167,7 +188,7 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
       val workers: Array[ActorRef] = new Array[ActorRef](numberOfActors);
       for(i <- 0 until numberOfActors) {
         /* pravimo Actor-a i saljemo mu poruku za pokretanje */
-        workers(i) = context.actorOf(Props(new Worker(i)), name = "myWorker-" + i);
+        workers(i) = context.actorOf(Props(new Worker(i, numberOfActors)), name = "myWorker-" + i);
         context.watch(workers(i));
         workers(i) ! "Pokreni";
       }// end for
@@ -190,7 +211,7 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
   }//end Class Controler
 
   /* pokrece pdf */
-  class Worker(number: Int) extends Actor with Timers {
+  class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
 
     /* podaci koji se dobijaju pokretanjem PDF citaca metodom run */
     /* proces koji predstavlja pokrenut PDF citac, bice ugasen nakon 5 sekundi od pokretanja */
@@ -201,6 +222,8 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
     var exitCode: Int = 0;
     var tuple : Tuple3[List[String], List[String], Process] = null;
     var destroyedManually: Boolean = true;
+    var numberOfIterations = 0;
+    var numberComplete = number;
 
     def receive = {
       case "Pokreni" => {
@@ -210,74 +233,73 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
           //val hello = ".\\inputs\\" + number+".\\FoxitReader.exe .\\inputs\\"+ number + "\\hello.pdf"
           //val hello = ".\\FoxitReader.exe .\\inputs\\"+ number + "\\hello.pdf"
           /* pravimo datoteku */
-          val fileName: String = ".\\PDFcorpus\\" + number + ".pdf";
-          val PDFparser = new ParserPDF(fileName, number);
+          val fileNumber = numberComplete % 20;
+          val fileName: String = ".\\PDFcorpus\\" + fileNumber + ".pdf";
+          val PDFparser = new ParserPDF(fileName, numberComplete);
           // PDFparser.readLines()
           //PDFparser.readFileAsString()
 
           PDFparser.readFileBinary()
-          println("Actor broj " + number + " je izmenio svoj fajl i sada ga pokrece.")
+          println("Actor broj " + numberComplete + " je izmenio svoj fajl i sada ga pokrece.")
 
-          val hello = ".\\FoxitReader.exe .\\fuzzedPDFcorpus\\" + number + "_fuzzed.pdf";
-          this.sender() ! "Pokrenuto iz Actora " + number;
+          val hello = ".\\FoxitReader.exe .\\fuzzedPDFcorpus\\" + numberComplete + "_fuzzed.pdf";
+          this.sender() ! "Pokrenuto iz Actora " + numberComplete;
           println("Postavljam tajmer.")
           /* za 8 sekundi saljemo poruku stop sami sebi */
-          timers.startSingleTimer("key", "stop", 5000 milliseconds);
+          timers.startSingleTimer("key", "stop", 3000 milliseconds);
 
           val qb = Process(hello) // scala.sys.process.ProcessBuilder
           PDFprocess = qb run (ProcessLogger((s) => { println("PL: " + s); out ::= s},
             (s) => { err ::= s; println("ER: " + s + "     duzina err: " + err.length);  }));
 
-          /* bez ovog poziva, run se odmah vraca i vraca prazne rezultate! Ovako cekamo kraj izvrsavanja da se dobije povratna vrednost */
-          //println("Duzina err: " + err.length)
-
-          //exitCode
-      /*    val futureTuple = Future {
-            PDFprocess.exitValue()
-          }.onComplete{
-            case Success(value) => {
-              println("Program je zavrsio sa radom!");
-              exitCode = value;
-              out = out.reverse
-              err = err.reverse
-              println("\n   (" + out + ", " + err + ", " + exitCode + ")");
-            };
-            case Failure(t) => println("Failure: " + t.getMessage)}
-          ;*/
-        }
+          }
         catch {
           case x => println("-------------- Exception " + x.getMessage + " caught ---------------");
+            self ! "stop";
         }
         finally {
-
        }
       }
       case "stop" => {
         //exitCode = PDFprocess.exitValue();
-        println("Gasim se: " + context.self.path.name)
+        println("Gasim proces: " + context.self.path.name)
 //        "powershell taskkill /F /IM FoxitReader.exe".!
-        /* pri normalnom izvrsavanju programa, proces je i dalje ziv jer se nije sam ugasio zbog greske */
-        if(PDFprocess.isAlive()) {
-          println("Program je zavrsio sa unistavanjem!");
-          PDFprocess.destroy();
+        /* ako je uhvacen neki izuzetak, onda je PDFprocess = null */
+        if(PDFprocess == null){
+          println("Program je zavrsio jer je uhvacen izuzetak.")
         }
-          /* ako se ugasio sam, to treba zabeleziti */
         else {
-          destroyedManually = false;
-          println("********** Program je zavrsio bez unistavanja!")
+          /* pri normalnom izvrsavanju programa, proces je i dalje ziv jer se nije sam ugasio zbog greske */
+          if (PDFprocess.isAlive()) {
+            println("Program je zavrsio sa unistavanjem!");
+            PDFprocess.destroy();
+          }
+          /* ako se ugasio sam, to treba zabeleziti */
+          else {
+            destroyedManually = false;
+            println("********** Program je zavrsio bez unistavanja!")
+          }
+          exitCode = PDFprocess.exitValue()
+          out = out.reverse
+          err = err.reverse
+          /* upisivanje rezultata u datoteku */
+          println("\n   (" + out + ", " + err + ", " + exitCode + ")");
+          if (out == null || err == null || PDFprocess == null) {
+            writeToFileNullValues(numberComplete, out, err, PDFprocess, destroyedManually);
+          }
+          else
+            writeToFile(numberComplete, out, err, exitCode, destroyedManually);
         }
-        exitCode = PDFprocess.exitValue()
-        out = out.reverse
-        err = err.reverse
-        /* upisivanje rezultata u datoteku */
-        println("\n   (" + out + ", " + err + ", " + exitCode + ")");
-        if(out == null || err == null || PDFprocess == null){
-          writeToFileNullValues(number, out, err, PDFprocess, destroyedManually);
-        }
-        else
-          writeToFile(number, out, err, exitCode, destroyedManually);
 
-       context.stop(self);
+        /* pokrecemo novu iteraciju */
+        if(numberOfIterations == -1)
+           context.stop(self);
+        else{
+          numberOfIterations+=1;
+          println("Povecali smo broj iteracija: " + numberOfIterations);
+          numberComplete = numberComplete+numberOfActors;
+          self ! "Pokreni";
+        }
       };
       case x => println("Sta kazes? " + x);
     }//end receive

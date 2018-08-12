@@ -119,11 +119,11 @@ class ParserPDF(fileName: String, actorNumber: Int) {
   def getHeuristicString(fileName: String): String = {
     var lines = Source.fromFile(".\\heuristics\\" + fileName, "ISO-8859-1").getLines().toArray
     val numberOfLines = lines.size
-    println("\tFajl " + fileName + " ima " + numberOfLines + " linija")
+    //println("\tFajl " + fileName + " ima " + numberOfLines + " linija")
     val lineNumber = Random.nextInt(numberOfLines)
-    println("\tLine number: " + lineNumber)
+    //println("\tLine number: " + lineNumber)
     val chosenOne = lines(lineNumber)
-    println("\tThe chosen one is: " + chosenOne)
+    //println("\tThe chosen one is: " + chosenOne)
     chosenOne
   }
 /*
@@ -149,7 +149,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
   }
 */
   def changeStream(str: String): String = {
-      println("--------- Menja se stream -----------")
+      //println("--------- Menja se stream -----------")
       /* izdvajamo samo binarni deo */
       var stream = (str.substring(6, str.length))
       stream = stream.substring(0, stream.length - 9)
@@ -162,13 +162,13 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       val streamInBytes = stream.getBytes(Charset.forName("ISO-8859-1"));
       val streamBytesSize = streamInBytes.size
       val numberOfChanges = Random.nextInt(2) //?!
-      println("\t\t ---- Broj parcica koje menjam: " + numberOfChanges)
-      println("\t\t ---- Pre izmena velicina bajtova je: " + streamBytesSize)
+      //println("\t\t ---- Broj parcica koje menjam: " + numberOfChanges)
+      //println("\t\t ---- Pre izmena velicina bajtova je: " + streamBytesSize)
       /* pravimo promene onoliko puta kolika je vrednost promenljive numberOfChanges*/
       for(i <- 0 until numberOfChanges) {
         /* odredjujemo velicinu novog niza bajtova: gledamo da bude neko manje parce */
         val smallChunk = getAPiece(streamBytesSize)
-        println("\t\t ------------ (streamBytesSize/50): " + smallChunk)
+        //println("\t\t ------------ (streamBytesSize/50): " + smallChunk)
         if (smallChunk != 0) {
           val newBytesSize = Random.nextInt(smallChunk)
           /* pravimo novi stream te velicine */
@@ -180,7 +180,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
           for (i <- 0 until newBytesSize)
             streamInBytes(i+startIndex) = newBytes(i)
         }
-        println("\t\t ---- Posle izmena velicina bajtova je: " + streamInBytes.size)
+        //println("\t\t ---- Posle izmena velicina bajtova je: " + streamInBytes.size)
       }
     streamComplete.append(new String(streamInBytes, Charset.forName("ISO-8859-1")))
     streamComplete.append("\nendstream\n")
@@ -232,8 +232,8 @@ class ParserPDF(fileName: String, actorNumber: Int) {
          var indexAppear = matchStringsMap(newElem)
          var replacement = if(str.startsWith("(")) generateString(false, str.size) else generateString(true, 0);
          indexes.append(new Tuple3(indexAppear, indexAppear+(str.size), replacement))
-         println("Menjamo string: " + str + " koji se pojavljuje od: " + indexAppear + " do: " + (indexAppear+str.size) +
-           " sa stringom: " + replacement)
+         //println("Menjamo string: " + str + " koji se pojavljuje od: " + indexAppear + " do: " + (indexAppear+str.size) +
+         //  " sa stringom: " + replacement)
        }
     }
 
@@ -258,8 +258,8 @@ class ParserPDF(fileName: String, actorNumber: Int) {
         var replacement = generateNumber(!str.contains("."));
         indexes.append(new Tuple3(indexAppear, indexAppear+(str.size), replacement))
         //oldIndexAppear = indexAppear + str.size
-        println("Menjamo broj: " + str + " koji se pojavljuje od: " + indexAppear + " do: " + (indexAppear+str.size) +
-          " sa brojem: " + replacement)
+        //println("Menjamo broj: " + str + " koji se pojavljuje od: " + indexAppear + " do: " + (indexAppear+str.size) +
+        //  " sa brojem: " + replacement)
       }
     }
 
@@ -281,8 +281,8 @@ class ParserPDF(fileName: String, actorNumber: Int) {
         var indexAppear = matchMethodsMap(newElem)
         var replacement = generateMethod(); //
         indexes.append(new Tuple3(indexAppear, indexAppear+(str.size), replacement))
-        println("Menjamo metod: " + str + " koji se pojavljuje od: " + indexAppear + " do: " + (indexAppear+str.size) +
-          " sa metodom: " + replacement)
+        //println("Menjamo metod: " + str + " koji se pojavljuje od: " + indexAppear + " do: " + (indexAppear+str.size) +
+        //  " sa metodom: " + replacement)
       }
     }
 
@@ -311,7 +311,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     var nextStream = 0;
     var streamsChanged = 0;
     for(i <- 0 until indexes.size) {
-      println("i je " + i)
+      //println("i je " + i)
       var element = indexes(i);
       var startElement = element._1;
       var endElement = element._2;
