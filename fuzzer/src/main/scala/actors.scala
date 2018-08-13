@@ -31,7 +31,8 @@ object actors {
 def writeToFile(number: Int, out: List[String], err: List[String], exitCode : Int, destroyedManually : Boolean) {
   /* naziv datoteke se pravi na osnovu broja Actor-a, i na osnovu toga da li je doslo do greske (postoje podaci u stderr) */
   /* ovo dodajem da ne bi ispisivao rezultate procesa koji nisu uzrokovali gresku pdf citaca */
-  if(err.isEmpty && destroyedManually){
+  if(destroyedManually){
+    println("------------------ destroyedManually" + destroyedManually)
     /* posto nije doslo do greske, brisemo izmenjeni pdf iz foldera fuzzedPDFcorpus */
     import java.io.IOException
     import java.nio.file.DirectoryNotEmptyException
@@ -49,8 +50,11 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
         // File permission problems are caught here.
         System.err.println(x)
     }
-    return;
+    finally {
+      return;
+    }
   }
+  println("------------------ !destroyedManually: " + destroyedManually)
   var fileName = ".\\results\\";
   if (!err.isEmpty)
     fileName = fileName + "ERR_";
@@ -161,7 +165,7 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
     //val PDFprocess: Process = Process("powershell scala .\\primer.scala") run (ProcessLogger((s) => { println("PL: " + s); },/*out ::= s */
      //                                                                   (s) => { err ::= s; println("ER: " + s + "     duzina err: " + err.length);  }));
     val PDFprocess: Process = qb run (ProcessLogger((s) => { println("PL: " + s); out ::= s},
-                                                    (s) => { err ::= s; println("ER: " + s + "     duzina err: " + err.length);  }));
+                                                    (s) => { err ::= s; /*println("ER: " + s + "     duzina err: " + err.length); */ }));
 
     /* bez ovog poziva, run se odmah vraca i vraca prazne rezultate! Ovako cekamo kraj izvrsavanja da se dobije povratna vrednost */
     val exit: Int = PDFprocess.exitValue();
@@ -242,7 +246,7 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
           PDFparser.readFileBinary()
           println("Actor broj " + numberComplete + " je izmenio svoj fajl i sada ga pokrece.")
 
-          val hello = ".\\FoxitReader.exe .\\fuzzedPDFcorpus\\" + numberComplete + "_fuzzed.pdf";
+          val hello = ".\\PDF_citaci\\slim\\SlimPDFReader.exe .\\fuzzedPDFcorpus\\" + numberComplete + "_fuzzed.pdf";
           this.sender() ! "Pokrenuto iz Actora " + numberComplete;
           println("Postavljam tajmer.")
           /* za 8 sekundi saljemo poruku stop sami sebi */
@@ -250,7 +254,7 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
 
           val qb = Process(hello) // scala.sys.process.ProcessBuilder
           PDFprocess = qb run (ProcessLogger((s) => { println("PL: " + s); out ::= s},
-            (s) => { err ::= s; println("ER: " + s + "     duzina err: " + err.length);  }));
+            (s) => { err ::= s; /*println("ER: " + s + "     duzina err: " + err.length); */ }));
 
           }
         catch {
