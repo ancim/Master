@@ -1,4 +1,4 @@
-name := "drakulaaa"
+name := "fuzzer"
 
 version := "0.1"
 

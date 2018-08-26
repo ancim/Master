@@ -4,20 +4,30 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.nio.file.{Files, Paths}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.util.Random
+import scala.util.matching.Regex
 
 class ParserPDF(fileName: String, actorNumber: Int) {
-
   /* sabloni koje pretrazujemo u datotekama */
   /* stringovi se mogu pojaviti kao karakteri izmedju () ili heksadekadno izmedju <> */
-  val stringPattern = """\([\s\S]+?\)|\<[0-9a-fA-F]*?\>""".r
-  val streamPattern = """stream""".r
-  val endStreamPattern = """endstream""".r
-  val streamCompletePattern = """stream[\s\S]+?endstream""".r
-  val methodPattern = """[0-9a-zA-Z]+\(\)""".r
-  val numberPattern = """[+-]?((\d+\.?\d+)|(\d*\.?\d+)|(\d+\.?\d*))""".r
+  val stringPattern: Regex = """\([\s\S]+?\)|\<[0-9a-fA-F]*?\>""".r
+  val streamCompletePattern: Regex = """stream[\s\S]+?endstream""".r
+  //val methodPattern: Regex = """[0-9a-zA-Z]+\(\)""".r
+  val numberPattern: Regex = """[+-]?((\d+\.?\d+)|(\d*\.?\d+)|(\d+\.?\d*))""".r
+  val namePattern: Regex = """/[a-zA-Z0-9]+""".r
+  val objectPattern: Regex = """(\d+) (\d+) (obj)([\s\S]+?)(endobj)""".r
 
+  var byteArray: Array[Byte] = Array.empty[Byte]
+
+  val knownNames = Array[String]("/Title", "/Dest", "/Parent", "/Next", "/Prev", "/XYZ", "/Size", "/Root", "/Page", "/ID", "/Info",
+    "/Type", "/Resources", "/MediaBox", "/Contents", "/XObject", "/Image", "/Name", "/Width", "/Height", "/BitsPerComponent", "/Length",
+    "/ColorSpace", "/DeviceRGB", "/Filter", "/FlateDecode", "/Subtype", "/MediaBox", "/Name", "/wpt336", "/Link", "/Rect", "/Border",
+    "/Annot", "/Action", "/URI", "/S", "/A", "/FontDescriptor", "/FontName", "/Arial,Bold", "/Ascent", "/CapHeight", "/Descent",
+    "/Flags", "/FontBBox", "/ItalicAngle", "/StemV", "/AvgWidth", "/Leading", "/MaxWidth", "/XHeight", "/Encoding", "/FirstChar",
+    "/LastChar", "/Widths", "/TrueType", "/Arial", "/Encoding", "/BaseFont", "/Verdana", "/CourierNew,Bold", "/TimesNewRoman,Italic",
+    "/Symbol", "/ProcSet", "/PDF", "/Text", "/ImageC", "/F1", "/F12", "/Dest", "/First")
   /* Funkcija koja u zavisnosti od broja cifara broja, vraca slucajan broj koji ce sluziti kao broj podataka koji se menjaju u odnosu na ukupan broj podataka */
   def getAPiece(number: Int): Int = {
     def numberOfDigitsTailRecursive(num: Int, help :Int): Int = {
@@ -25,21 +35,26 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       else numberOfDigitsTailRecursive(num/10, help+1)
     }
     if(number == 0) 0
-      else {
-        val numberOfDigits = numberOfDigitsTailRecursive(number, 0)
-        numberOfDigits match {
-          case 1 => 1
-          case 2 => Random.nextInt(number / 3)
-          case 3 => Random.nextInt(number / 6)
-          case 4 => Random.nextInt(number / 50)
-          case 5 => Random.nextInt(number / 300)
-          case 6 => Random.nextInt(number / 3000)
-          case 7 => Random.nextInt(number / 8000)
-          case 8 => Random.nextInt(number / 60000)
-          case 9 => Random.nextInt(number / 2000000)
-          case _ => println("Vise od 9 cifara?"); 1
-        }
+    else {
+      val numberOfDigits = numberOfDigitsTailRecursive(number, 0)
+      numberOfDigits match {
+        case 1 => 1
+        case 2 => Random.nextInt(number / 3)
+        case 3 => Random.nextInt(number / 6)
+        case 4 => Random.nextInt(number / 50)
+        case 5 => Random.nextInt(number / 300)
+        case 6 => Random.nextInt(number / 3000)
+        case 7 => Random.nextInt(number / 8000)
+        case 8 => Random.nextInt(number / 60000)
+        case 9 => Random.nextInt(number / 500000)
+        case _ => println("Vise od 9 cifara?"); 1
       }
+    }
+  }
+
+  /* funkcija koja konvertuje string u njegov heksadecimalni zapis */
+  def string2hex(str: String): String = {
+    str.toList.map(_.toInt.toHexString).mkString
   }
 
   /* Funkcija koja generise stringove u formatu <...> */
@@ -55,16 +70,24 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       sb.toString
     }
 
-    val s: StringBuilder = new StringBuilder();
-    s.append("<")
-    val chars: Seq[Char] = Seq[Char]('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'a','b', 'c', 'd','e', 'f');
-    s.append(randomStringFromCharList(length, chars));
-    s.append(">")
-    s.toString()
+    if(Random.nextInt(3)==2) {
+      val s: StringBuilder = new StringBuilder();
+      s.append("<")
+      val chars: Seq[Char] = Seq[Char]('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'a', 'b', 'c', 'd', 'e', 'f');
+      s.append(randomStringFromCharList(length, chars));
+      s.append(">")
+      s.toString()
+    }
+    else{
+      string2hex(generateString(false, Random.nextInt(1000)+1))
+    }
+
   }
 
   /* Funkcija koja generise stringove u formatu <...> ako je hex true, inace stringove u formatu (....)  */
   def generateString(hex: Boolean, length: Int): String ={
+    if(length == 0)
+      return ""
     if(hex){
       generateHexString(length)
     }
@@ -76,7 +99,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       }
 
       /* slucajno se odredjuje da li se string uzima iz skupa stringova (heuristike) ili se slucajno generise */
-      if(Random.nextInt(5)>2){
+      if(Random.nextInt(5)>1){
         var filename: String = null;
         Random.nextInt(4) match {
           case 0 => filename = "strings\\formatStrings.txt";
@@ -103,7 +126,11 @@ class ParserPDF(fileName: String, actorNumber: Int) {
 
   def generateNumber(integer: Boolean): String = {
     if(Random.nextInt(2) == 1){
-      var filename: String = if (integer) "ints\\integerOverflows.txt" else "reals\\realOverflows.txt";
+      var filename: String = null;
+      if(Random.nextInt(2) == 1)
+        filename = "strings\\naughtyStrings.txt";
+      else
+        filename = if (integer) "ints\\integerOverflows.txt" else "reals\\realOverflows.txt";
       getHeuristicString(filename);
     }
     else if(integer)
@@ -125,6 +152,24 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     val chosenOne = lines(lineNumber)
     //println("\tThe chosen one is: " + chosenOne)
     chosenOne
+  }
+
+  def generateName(): String = {
+    var r = Random.nextInt(2);
+    var s = new StringBuilder();
+    //print("generateName(): ")
+    r match {
+      case 0 => {
+        //println("0")
+        s.append("/");
+        s.append(generateString(false, Random.nextInt(50)+1))
+        s.toString()
+      }
+      case 1 => {
+        //println("1")
+        knownNames(Random.nextInt(knownNames.size))
+      }
+    }
   }
 /*
   def replaceAllSB(builder: StringBuilder, from: String, to: String, startIndex: Int)
@@ -150,6 +195,24 @@ class ParserPDF(fileName: String, actorNumber: Int) {
 */
   def changeStream(str: String): String = {
       //println("--------- Menja se stream -----------")
+    /* prvi slucaj je umetanje cele druge pdf datoteke kao sadrzaj stream-a */
+    val wholePdf = Random.nextInt(1000)
+    if(wholePdf>990){
+      println("Umecemo ceo pdf u drugi pdf!")
+      Random.nextInt(3) match {
+        case 0 => new String(byteArray, Charset.forName("ISO-8859-1"))
+        case 1 => {
+          val bytes = Files.readAllBytes(Paths.get("pokvareni.pdf"))
+          new String(bytes, Charset.forName("ISO-8859-1"))
+        }
+        case 2 =>{
+          val bytes = Files.readAllBytes(Paths.get("nepokvareni.pdf"))
+          new String(bytes, Charset.forName("ISO-8859-1"))
+        }
+      }
+    }
+    /* drugi slucaj je menjanje datog stream-a mutacijom, dodavanjem ili brisanjem bajtova */
+    else {
       /* izdvajamo samo binarni deo */
       var stream = (str.substring(6, str.length))
       stream = stream.substring(0, stream.length - 9)
@@ -159,13 +222,13 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       streamComplete.append("\nstream\n")
       //streamComplete.append("\n")
       // pretvaramo ga u bajtove
-      val streamInBytes = stream.getBytes(Charset.forName("ISO-8859-1"));
+      var streamInBytes = stream.getBytes(Charset.forName("ISO-8859-1"));
       val streamBytesSize = streamInBytes.size
-      val numberOfChanges = Random.nextInt(2) //?!
+      val numberOfChanges = Random.nextInt(4) //?!
       //println("\t\t ---- Broj parcica koje menjam: " + numberOfChanges)
       //println("\t\t ---- Pre izmena velicina bajtova je: " + streamBytesSize)
       /* pravimo promene onoliko puta kolika je vrednost promenljive numberOfChanges*/
-      for(i <- 0 until numberOfChanges) {
+      for (i <- 0 until numberOfChanges) {
         /* odredjujemo velicinu novog niza bajtova: gledamo da bude neko manje parce */
         val smallChunk = getAPiece(streamBytesSize)
         //println("\t\t ------------ (streamBytesSize/50): " + smallChunk)
@@ -178,52 +241,151 @@ class ParserPDF(fileName: String, actorNumber: Int) {
           /* ovo parce moramo umetnuti na neko mesto u postojecim bajtovima */
           val startIndex = Random.nextInt(streamBytesSize - newBytesSize - 1)
           for (i <- 0 until newBytesSize)
-            streamInBytes(i+startIndex) = newBytes(i)
+            streamInBytes(i + startIndex) = newBytes(i)
         }
         //println("\t\t ---- Posle izmena velicina bajtova je: " + streamInBytes.size)
       }
-    streamComplete.append(new String(streamInBytes, Charset.forName("ISO-8859-1")))
-    streamComplete.append("\nendstream\n")
-    streamComplete.toString();
+      /* slucajno odredjujemo da li brisemo, umecemo elemente, ili nista od toga */
+      val delIns = Random.nextInt(1000)
+      if (delIns > 990) {
+        val streamBytesBuffer = streamInBytes.to[ArrayBuffer]
+        if (delIns > 995) {
+          val numberElementsToRemove = Random.nextInt(getAPiece(streamBytesSize) + 1)
+          streamBytesBuffer.remove(Random.nextInt(streamBytesSize - numberElementsToRemove), numberElementsToRemove)
+        }
+        else {
+          val piece = getAPiece(streamBytesSize) + 1
+          println("streamBytesSize: " + streamBytesSize + ", getAPiece: " + piece)
+          val numberElementsToInsert = Random.nextInt(piece)
+          val bytes: Array[Byte] = new Array[Byte](numberElementsToInsert)
+          Random.nextBytes(bytes)
+          streamBytesBuffer.insertAll(Random.nextInt(streamBytesSize), bytes)
+        }
+        streamInBytes = streamBytesBuffer.toArray
+      }
+      streamComplete.append(new String(streamInBytes, Charset.forName("ISO-8859-1")))
+      streamComplete.append("\nendstream\n")
+      streamComplete.toString();
+    }
   }
 
   /* ------------------------------------------------------------------------------------------------------- */
   def readFileBinary() = {
-    val byteArray: Array[Byte] = Files.readAllBytes(Paths.get(fileName));
-    /* pravimo string koji sadrzi podatke iz fajla */
+    byteArray = Files.readAllBytes(Paths.get(fileName));
+    /* pravimo string koji sadrzi podatke iz datoteke */
     var contentString = new String(byteArray, Charset.forName("ISO-8859-1"))
 
+    /* brisemo mali broj objekata tj. menjamo ih sa praznim stringom */
+    val noObjects = new StringBuilder();
+    var startIndex = 0;
+    objectPattern.findAllMatchIn(contentString).foreach(m => {
+      noObjects.append(contentString.substring(startIndex, m.start))
+      if(Random.nextInt(1000)>997){
+        //println("Fajl: " + actorNumber +"; Obrisan objekat: " + m.group(1) + " " + m.group(2))
+        noObjects.append("\n")
+      }
+      else {
+        noObjects.append(m)
+      }
+      startIndex = m.end
+    })
+    noObjects.append(contentString.substring(startIndex))
+
     /* sve osim stream-ova trazimo u podacima bez streamova */
-    val matchStreams = streamCompletePattern.findAllMatchIn(contentString).toList
+    val matchStreams = streamCompletePattern.findAllMatchIn(noObjects).toList
     var deleteStreams = new String("");
     var noStreamsBuilder = new StringBuilder()
-    var startIndex = 0;
+    startIndex = 0;
     for(elem <- matchStreams) {
-      var index = contentString.indexOf(elem.toString(), startIndex)
+      var index = noObjects.indexOf(elem.toString(), startIndex)
       //println("Prvo pojavljivanje je od: " + index + " do: " + (index + (elem.toString()).size))
-      noStreamsBuilder.append(contentString.substring(startIndex, index))
+      noStreamsBuilder.append(noObjects.substring(startIndex, index))
       noStreamsBuilder.append("stream\nendstream")
       startIndex = index + (elem.toString()).size;
     }
-    noStreamsBuilder.append(contentString.substring(startIndex));
-    /* u deleteStreams se nalaze podaci bez stream-ova; upisujemo podatke u fajl fajlBezStreamova.txt radi provere */
+    noStreamsBuilder.append(noObjects.substring(startIndex));
+
+    /* u deleteStreams se nalaze podaci bez stream-ova; upisujemo podatke u fajl fajlBezStreamova.pdf radi provere */
     deleteStreams = noStreamsBuilder.toString()
-    var tempFileNoStreams: String = "fajlBezStreamova.pdf";
+    var tempFileNoStreams: String = "fajlBezStreamova.pdf"// +actorNumber + ".pdf";
     val bosns = new BufferedOutputStream(new FileOutputStream(tempFileNoStreams))
     bosns.write(deleteStreams.getBytes(Charset.forName("ISO-8859-1")))
     bosns.close()
+    val deleteStreamsSize = deleteStreams.size
 
-    /* iz stringa (bez stream-ova) izvlacimo PDF stringove */
-    val matchStrings = stringPattern.findAllMatchIn(deleteStreams).toList
-    val matchStringsMap = stringPattern.findAllMatchIn(deleteStreams).map(_.start).toList
-    val numberOfStrings = matchStrings.size
-    println("Ukupno ima: " + numberOfStrings + " stringova, ")
-    var percentOfChange = getAPiece(numberOfStrings);
+    /* trazimo imena */
+    val buf = scala.collection.mutable.ListBuffer.empty[Regex.Match]
+    val bufInt = scala.collection.mutable.ListBuffer.empty[Int]
+    namePattern.findAllMatchIn(deleteStreams).foreach(m => {
+     // if(m.toString() == "/Length")
+     //   println("Ime /Length")
+      if(Random.nextInt(100)>95) {
+        //println("Pronasli smo ime: " + m.toString())
+        buf += m
+        bufInt+=m.start
+      }
+    })
+    val matchNames = buf.toList
+    val matchNamesMap = bufInt.toList
+
+    val numberOfNames = matchNames.size
+       println("Ukupno ima: " + numberOfNames + " imena, ")
+    var percentOfChange = getAPiece(numberOfNames);
     var numberOfChanged = 0
     var indexes = scala.collection.mutable.ArrayBuffer.empty[Tuple3[Int, Int, String]]
     if(percentOfChange != 0) {
+      numberOfChanged = percentOfChange//Random.nextInt(percentOfChange+1)
+      println("\ta mi biramo da promenimo: " + numberOfChanged)
+      var newElems = new Array[Int](numberOfChanged)
+      for(i <- 0 until numberOfChanged){
+        var newElem = Random.nextInt(numberOfNames)
+        while(newElems.contains(newElem)){
+          println("while")
+          newElem = Random.nextInt(numberOfNames)
+        }
+        var str = matchNames(newElem).toString()
+        var indexAppear = matchNamesMap(newElem)
+        var replacement = ""
+        if(str == "/Length" && Random.nextInt(100)>95){
+          replacement = ""
+        }
+        else replacement = generateName()
+        indexes.append(new Tuple3(indexAppear, indexAppear+(str.size), replacement))
+        //println("Menjamo ime: " + str + " koji se pojavljuje od: " + indexAppear + " do: " + (indexAppear+str.size) +
+        //  " sa imenom: " + replacement)
+      }
+    }
+
+/*    var t = 0;
+    objectPattern.findAllMatchIn(deleteStreams).foreach(m => {
+      if(t<2) {
+        //m.group(1).toString
+        println("Fajl" + fileName + "\n\tObjekat1: "+m.group(1));
+        println("\tObjekat2: "+m.group(2) + "\n");
+        println("\tObjekat3: "+m.group(3) + "\n");
+
+        var s = new StringBuilder()
+        s.append("\tObjekat4: ")
+        s.append(m.group(4).replaceAll("""<""", "\\<"))
+        println(s.toString());
+        //println(s"Fajl $fileName \tObjekat2: $m.group(2)")
+        println("\tObjekat5: "+m.group(5) + "\n");
+        //println(m.group(2).toString())
+        t+=1
+      }
+    })
+  */
+    /* iz stringa (bez stream-ova) izvlacimo PDF stringove */
+    val matchStrings = stringPattern.findAllMatchIn(deleteStreams).toList
+    val matchStringsMap = matchStrings.map(_.start)// stringPattern.findAllMatchIn(deleteStreams).map(_.start).toList
+    val numberOfStrings = matchStrings.size
+ //!   println("Ukupno ima: " + numberOfStrings + " stringova, ")
+    percentOfChange = getAPiece(numberOfStrings);
+    numberOfChanged = 0
+    //var indexes = scala.collection.mutable.ArrayBuffer.empty[Tuple3[Int, Int, String]]
+    if(percentOfChange != 0) {
        numberOfChanged = percentOfChange//Random.nextInt(percentOfChange+1)
-       println("\ta mi biramo da promenimo: " + numberOfChanged)
+ //!      println("\ta mi biramo da promenimo: " + numberOfChanged)
       var newElems = new Array[Int](numberOfChanged)
        for(i <- 0 until numberOfChanged){
         var newElem = Random.nextInt(numberOfStrings)
@@ -236,12 +398,11 @@ class ParserPDF(fileName: String, actorNumber: Int) {
          //  " sa stringom: " + replacement)
        }
     }
-
-    println("*************************************************************************")
+   //! println("*************************************************************************")
 
     /* trazimo brojeve */
     val matchNumbers = numberPattern.findAllMatchIn(deleteStreams).toList
-    val matchNumbersMap = numberPattern.findAllMatchIn(deleteStreams).map(_.start).toList
+    val matchNumbersMap = matchNumbers.map(_.start)
     val numberOfNumbers = matchNumbers.size
     println("Ukupno ima: " + numberOfNumbers + " brojeva, ")
     percentOfChange = getAPiece(numberOfNumbers);
@@ -264,8 +425,8 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     }
 
     /* trazimo metode */
-    val matchMethods = methodPattern.findAllMatchIn(deleteStreams).toList // //
-    val matchMethodsMap = methodPattern.findAllMatchIn(deleteStreams).map(_.start).toList
+/*    val matchMethods = methodPattern.findAllMatchIn(deleteStreams).toList // //
+    val matchMethodsMap = matchMethods.map(_.start)
     val numberOfMethods = matchMethods.size // //
     println("Ukupno ima: " + numberOfMethods + " metoda, ") //
     percentOfChange = getAPiece(numberOfMethods); //
@@ -285,25 +446,24 @@ class ParserPDF(fileName: String, actorNumber: Int) {
         //  " sa metodom: " + replacement)
       }
     }
-
+*/
     /* trazimo streamove */
     val matchStreamsNotComplete = streamCompletePattern.findAllMatchIn(deleteStreams).toList // //
-    val matchStreamsMap = streamCompletePattern.findAllMatchIn(deleteStreams).map(_.start).toList
+    val matchStreamsMap = matchStreamsNotComplete.map(_.start)
     val numberOfStreamsNotComplete = matchStreamsNotComplete.size // //
-    println("Ukupno ima: " + numberOfStreamsNotComplete + " streamova, ") //
-    for(i <- 0 until matchStreamsNotComplete.size){
+ //!   println("Ukupno ima: " + numberOfStreamsNotComplete + " streamova, ") //
+    for(i <- 0 until numberOfStreamsNotComplete){
       indexes.append(new Tuple3(matchStreamsMap(i), matchStreamsMap(i)+matchStreamsNotComplete(i).toString().size, null))
     }
 
     //println("Ukupno menjamo: " + indexes.size + " elemenata.")
 
     indexes = indexes.sortBy(_._1)
-    println("\n ----------------- Sortirani elementi: -------------- \n")
+   /* println("\n ----------------- Sortirani elementi: -------------- \n")
     for(element <- indexes)
       println("Element: (" + element._1 + ", " + element._2 + ", " + element._3 + ")")
-
+*/
     /* sada sve zapisujem u novi fajl */
-    //val matchStreams2 = streamCompletePattern.findAllMatchIn(contentString).toList
     val newContent = new StringBuilder();
     var beginIndex = 0;
     var prevousElement: Tuple3[Int, Int, String] = null;
@@ -316,6 +476,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       var startElement = element._1;
       var endElement = element._2;
       var replacement = element._3;
+      //println("startElement: " + startElement + ", endElement: " + endElement)
       /* onda je u pitanju stream */
       if(replacement == null){
         //println("replacement je null: " + replacement)
@@ -342,131 +503,16 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       }
     }
     newContent.append(deleteStreams.substring(beginIndex))
-    println("\t\t a biramo da menjamo: " + streamsChanged + " streamova")
+//!    println("\t\t a biramo da menjamo: " + streamsChanged + " streamova")
     println("\t ----------- Ukupno promenjeno: " + dataChanged + " podataka od " + indexes.size + " podataka.")
     /* zapisujemo novi fajl */
     var newContentFile: String = ".\\fuzzedPDFcorpus\\" + actorNumber.toString +"_fuzzed.pdf";
+    //println("Novi fajl: " + newContentFile)
     //var newContentFile = new File(newContentName);
     //newContent.
     if (!new File(newContentFile).exists()) Files.createFile(Paths.get(newContentFile))// createDirectory(Paths.get(newContentFile))
     val buffOutFinal = new BufferedOutputStream(new FileOutputStream(newContentFile))
     buffOutFinal.write((newContent.toString()).getBytes(Charset.forName("ISO-8859-1")))
     buffOutFinal.close()
-}
-
-  /*
-def readFileAsString() = {
-val content: String =  Source.fromFile(fileName, "ISO-8859-1").getLines().mkString
-Source.fromFile(fileName, "ISO-8859-1").getLines().mkString
-/* u celom sadrzaju pretrazujemo pojavljivanje stringova ********************************************************/
-val matchStringInLine = stringPattern.findAllIn(content)
-matchStringInLine.foreach(s => {
-  println("Nadjen string: " + s);
-  //println("Extended character: " + Character.toChars(142).toString);
-  /* ovaj string treba zameniti sa: */
-  if (s.startsWith("(")) {
-    for (i <- 1 until 2) {
-      /*var next = Random.nextString(20);
-                                    println("\t\tMenjamo ga sa: " + next)
-                                    next.foreach(c => println("\t\t\tKarakter: " + c))*/
-      println("\t\tMenjamo ga sa: " + generateString(false, s.size))
-
-    }
-    //println("\t\tMenjamo ga sa: " + Random.alphanumeric.take(10).mkString)
-  } //()
-  else {
-    for (i <- 1 until 2) {
-      /*var next = Random.nextString(20);
-                                    println("\t\tMenjamo ga sa: " + next)
-                                    next.foreach(c => println("\t\t\tKarakter: " + c))*/
-      println("\t\tMenjamo ga sa: " + generateHexString(s.size))
-    }
-  } //<>
-}//foreach
-)
-/*matchStringInLine match {
-  case Some(s) => println("Nadjen string: " + s)
-  case None => ;
-}*/
-
-println("**********************************************************************************************************************")
-/* u celom sadrzaju pretrazujemo pojavljivanje stream-ova ********************************************************/
-val matchStream = streamCompletePattern.findAllIn(content)
-matchStream.foreach(s => {
-  var stream = (s.substring(6, s.length))
-  stream = stream.substring(0, stream.length - 9)
-//      println("\t"+s.substring(0, 5))
-  println("Nadjen stream: \n" + stream + "\n");
-  val streamByteArray: Array[Byte] = stream.getBytes("ISO-8859-1");
-  println("\t\tKao ByteArray: ")
-//      streamByteArray.foreach(b => print("" + b.toString + ", "))
-//      println()
-  /* stream pisemo u privremeni fajl da bismo ga procitali kao sekvencu bajtova */
-/*    var tempFileName: String = "tempStream.pdf";
-  /* pravimo datoteku za upis */
-  if (!Files.exists(Paths.get(tempFileName))) {
-    val file = new File(tempFileName)
-    file.createNewFile();
   }
-  else
-    FileChannel.open(Paths.get(fileName), StandardOpenOption.WRITE).truncate(0).close()
-
-  Files.write(Paths.get(fileName), stream.getBytes(StandardCharsets.ISO_8859_1), StandardOpenOption.APPEND)
-*/
-  //println("\t" + s.substring(0, 6) + " " + s.substring(s.length-9, s.length))
-  //s.slice(0, 5);
-});
-
-}
-*/
-  /*
-def readLines(): Unit = {
-
-/*    if (!Files.exists(Paths.get("prepisivanje.pdf"))) {
-  val file = new File("prepisivanje.pdf")
-  file.createNewFile();
-}
-else
-  FileChannel.open(Paths.get("prepisivanje.pdf"), StandardOpenOption.WRITE).truncate(0).close()
-*/
-var skip = false;
-for(line <- Source.fromFile(fileName, "ISO-8859-1").getLines()) {
-  println("Linija:\t" + line);
-  val line2 = line + "\n";
-  //Files.write(Paths.get("prepisivanje.pdf"), line2.getBytes(StandardCharsets.ISO_8859_1), StandardOpenOption.APPEND)
-
-  val words = line.split(" ");
-
-  //ako smo naisli na endstream, onda linije vise ne treba preskakati
-  val matchEndStreamInLine = endStreamPattern.findFirstIn(line)
-  matchEndStreamInLine match {
-    case Some(s) => skip = false; println("Nadjen endstream: " + s);
-    case None => ;
-  }
-
-  val matchStreamInLine = streamPattern.findFirstIn(line)
-  matchStreamInLine match {
-    case Some(s) => skip = true; println("Nadjen stream: " + s)
-    case None => ;
-  }
-
-  if(!skip) {
-    for (word <- words) {
-      val Digit = """\d""".r
-      val date = """(\d\d\d\d)-(\d\d)-(\d\d)""".r
-
-      "2004-01-20" match {
-        case date(year, month, day) => println(s"$year was a good year for PLs.")
-      }
-      word match {
-        case Digit() => println(s"Cifra!")
-        case stringPattern() => println("Niska karaktera!")
-        case _ => println("Nista od navadenog!")
-      }
-      println("\tword: " + word)
-    }
-    println("")
-  }//if !skip
-}
-}*/
 }
