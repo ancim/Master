@@ -15,88 +15,355 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.StandardOpenOption
 import java.nio.file.{Files, Paths}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.io.StdIn
+
+/* kontrolise sve aktore koji generisu i pokrecu pdf datoteke */
+class Controler extends Actor {
+  import actors._
+  /* broj zavrsenih PDF citanja i broj Actor-a */
+  var numberOfTerminations = 0;
+  val numberOfActors = numberOfWorkers;
+  var numberOdPDFsTested = 0;
+  var numberOfErrors = 0;
+  val workers: Array[ActorRef] = new Array[ActorRef](numberOfActors);
+
+  def start() = {
+    import better.files._
+    import better.files.File._
+    println("Pokrecem Worker-e");
+    for(i <- 0 until numberOfActors) {
+      /* pravimo Actor-a i saljemo mu poruku za pokretanje */
+      workers(i) = context.actorOf(Props(new Worker(i, numberOfActors)), name = "myWorker-" + i);
+      context.watch(workers(i));
+      workers(i) ! "Pokreni";
+    }// end for
+  }
+
+  def writeTestResults(msg: String): Unit ={
+    var fileName = ".\\results\\allTestResults.txt";
+    //      println("Filename: " + fileName)
+    /* pravimo datoteku za ispis ako vec ne postoji */
+    if (!Files.exists(Paths.get(fileName))) {
+      val file = new File(fileName)
+      file.createNewFile();
+    }
+    var info = new StringBuilder("\n--------------------------------------------------\n");
+    reader match {
+      case 1 => info.append("\tTestiran citac: Foxit PDF Reader\n");
+      case 2 => info.append("\tTestiran citac: Slim PDF Reader\n");
+      case 3 => info.append("\tTestiran citac: Sumatra PDF Reader\n");
+      case _ => info.append("\tTestiran citac na putanji: " + path + "\n");
+    }
+    info.append("\t"+msg)
+    info.append("\n--------------------------------------------------\n");
+    Files.write(Paths.get(fileName), info.toString().getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+  }
+
+  def quit(): Unit ={
+    /* Upisujemo podatke o testiranju */
+    val msg = "............... Ukupno je testirano: " + numberOdPDFsTested + " datoteka, a pronadjeno je: " + numberOfErrors + " gresaka. ................";
+    //writeTestResults(msg);
+    println(msg)
+    println("............... Gasim sistem ................")
+    context.system.terminate();
+  }
+
+  def receive = {
+    case "Pokrenuto" => println("Pokrenuto: " + context.sender().path.name);
+    case "Pocni!" => println("\nMain kaze pocni!"); start();
+    case "Testirano" => numberOdPDFsTested+=1;
+    case "Greska" => numberOfErrors+=1; numberOdPDFsTested+=1;
+    case Terminated(x) => {
+      println(x + " terminated")
+      numberOfTerminations+=1;
+      if(numberOfTerminations == numberOfActors) {
+        quit()
+      }
+    };
+    case x => println("Posiljaoc " + context.sender().toString() + " kaze " + x);
+  } // end receive blok
+
+}//end Class Controler
+
+/* pokrece pdf */
+class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
+  import actors._
+  /* podaci koji se dobijaju pokretanjem PDF citaca metodom run */
+  /* proces koji predstavlja pokrenut PDF citac, bice ugasen nakon 5 sekundi od pokretanja */
+  var PDFprocess : Process = null;
+  var out = scala.collection.mutable.ArrayBuffer.empty[String];
+  var err = scala.collection.mutable.ArrayBuffer.empty[String];
+  var exitCode: Int = 0;
+  var destroyedManually: Boolean = true;
+  var numberOfIterations = 1;
+  var numberComplete = number;
+
+  def getNumber() = numberComplete
+
+  def receive = {
+    case "Pokreni" => {
+      System.gc()
+        if (readMemory() == false) {
+//          println(".............. Cekam 2 sekunde ..............")
+          timers.startSingleTimer("key", "Pokreni", 0 milliseconds); // !!!!!!!!!!!! bilo 2000
+        }
+        else {
+          try {
+          /* pravimo datoteku */
+          val fileNumber = numberComplete % numberOfPdfs;
+          val fileName: String = ".\\PDFcorpus\\" + fileNumber + ".pdf";
+          val PDFparser = new ParserPDF(fileName, numberComplete);
+          PDFparser.readFileBinary()
+          //PDFparser = null
+
+          //!  println("Actor broj " + numberComplete + " je izmenio svoj fajl i sada ga pokrece.")
+          val readerPart = new StringBuilder();
+          if (path == "") {
+            readerPart.append(".\\PDF_citaci\\")
+            reader match {
+              case 1 => readerPart.append("Foxit\\FoxitReader.exe ");
+              case 2 => readerPart.append("slim\\SlimPDFReader.exe ");
+              case 3 => readerPart.append("sumatra\\SumatraPDF.exe ");
+              //case 4 => readerPart.append("visagesoft\\vspdfreader.exe ");
+              //case 5 => readerPart.append("evince\\Evince.lnk ")
+            }
+          }
+          else {
+            readerPart.append(path)
+            readerPart.append(" ")
+          }
+          val command: String = readerPart.toString + ".\\fuzzedPDFcorpus\\" + numberComplete + "_fuzzed.pdf";
+          println("Komanda " + command)
+          /* za "milisecs" milisekundi saljemo poruku stop sami sebi */
+          timers.startSingleTimer("key", "stop", millisecs milliseconds);
+
+          val qb: ProcessBuilder = Process(command) // scala.sys.process.ProcessBuilder
+          PDFprocess = qb run (ProcessLogger((s) => {
+            /*println("PL: " + s); */ //out.append(s)
+          },
+            (s) => {
+              //err.append(s); /*println("ER: " + s + "     duzina err: " + err.length); */
+            }));
+        }
+        catch {
+          case x => println("-------------- Exception " + x.getMessage + " caught: ---------------\n" + x.printStackTrace() + "\n");
+            self ! "stop";
+        }
+        finally {
+        }
+      }
+    }
+    case "stop" => {
+      //exitCode = PDFprocess.exitValue();
+      println("Gasim proces: " + context.self.path.name)
+      //        "powershell taskkill /F /IM FoxitReader.exe".!
+      /* ako je uhvacen neki izuzetak, onda je PDFprocess = null */
+      if(PDFprocess == null){
+        println("Program " + numberComplete + " je zavrsio jer je uhvacen izuzetak.")
+      }
+      else {
+        /* pri normalnom izvrsavanju programa, proces je i dalje ziv jer se nije sam ugasio zbog greske */
+        if (PDFprocess.isAlive()) {
+          println("Proces je ziv!")
+          context.parent ! "Testirano";
+          //!   println("Program " + numberComplete + " je zavrsio sa unistavanjem tj. ugasen je rucno!");
+          PDFprocess.destroy();
+        }
+        /* ako se ugasio sam, to treba zabeleziti */
+        else {
+          destroyedManually = false;
+          context.parent ! "Greska";
+          //!  println("********** Program " + numberComplete + " je zavrsio bez unistavanja tj. sam se ugasio!")
+        }
+        exitCode = PDFprocess.exitValue()
+        /* upisivanje rezultata u datoteku */
+        //!  println("\n   (" + out + ", " + err + ", " + exitCode + ")");
+        if (out == null || err == null || PDFprocess == null) {
+          writeToFileNullValues(numberComplete, out, err, PDFprocess, destroyedManually);
+        }
+        else
+          writeToFile(numberComplete, out, err, exitCode, destroyedManually);
+
+        PDFprocess = null
+      }
+      out.clear()
+      err.clear()
+
+      /* pokrecemo novu iteraciju */
+      if(numberOfIterations == iterations)
+        context.stop(self);
+      else{
+        numberOfIterations+=1;
+        //println("Povecali smo broj iteracija: " + numberOfIterations);
+        numberComplete = numberComplete+numberOfActors;
+        self ! "Pokreni";
+      }
+    };
+    case x => println("Sta kazes? " + x);
+  }//end receive
+}
 
 object actors {
 
   var reader: Int = -1;
   var iterations: Int = -1;
-/* svi podaci o izvrsavanju programa se upisuju u datoteku odgovarajuceg naziva */
-def writeToFile(number: Int, out: List[String], err: List[String], exitCode : Int, destroyedManually : Boolean) {
-  /* naziv datoteke se pravi na osnovu broja Actor-a, i na osnovu toga da li je doslo do greske (postoje podaci u stderr) */
-  /* ovo dodajem da ne bi ispisivao rezultate procesa koji nisu uzrokovali gresku pdf citaca */
+  var numberOfWorkers = 0;
+  var millisecs = 0;
+  var path = ""
+  var numberOfPdfs = Files.list(Paths.get(".\\PDFcorpus\\")).count()
 
-  val path = Paths.get(".\\fuzzedPDFcorpus\\" + number + "_fuzzed.pdf");
-  if(destroyedManually){
-  //!  println("------------------ destroyedManually " + destroyedManually)
-    /* posto nije doslo do greske, brisemo izmenjeni pdf iz foldera fuzzedPDFcorpus */
-    import java.io.IOException
-    import java.nio.file.DirectoryNotEmptyException
-    import java.nio.file.Files
-    import java.nio.file.NoSuchFileException
-    try
-      Files.delete(path)
-    catch {
-      case x: NoSuchFileException =>
-        System.err.format("%s: no such" + " file or directory%n", path)
-      case x: DirectoryNotEmptyException =>
-        System.err.format("%s not empty%n", path)
-      case x: IOException =>
-        // File permission problems are caught here.
-        System.err.println(x)
+  def pdfsSize: Long = {
+    var sumOfSizes: Long = 0
+    Files.list(Paths.get(".\\PDFcorpus\\")).forEach(path => {
+      import java.nio.channels.FileChannel
+      val fileChannel = FileChannel.open(path)
+      val fileSize = fileChannel.size
+      //println("Velicina datoteke " + path + " u bajtovima je: " + fileSize)
+      sumOfSizes += fileSize
+      fileChannel.close()
+    })
+    sumOfSizes
+  }
+
+  def getMaxWorkers(): Int = {
+    val maxMemory = Runtime.getRuntime().maxMemory()
+    val totalMemory = Runtime.getRuntime().totalMemory()
+    val freeMemory = Runtime.getRuntime().freeMemory()
+    val allocatedMemory = totalMemory - freeMemory
+    var presumableFreeMemory = maxMemory - allocatedMemory
+
+    val numberOfCores = Runtime.getRuntime.availableProcessors()
+    /* npr. maksimalni broj Worker objekata moze da bude za sada (pre analize memorije) 3*numberOfCores */
+    var maxWorkers = 3*numberOfCores
+    /* sada treba da vidimo da li ima dovoljno memorije za ovoliko Worker objekata */
+
+    var sizes = scala.collection.mutable.ArrayBuffer.empty[Long]
+
+    Files.list(Paths.get(".\\PDFcorpus\\")).forEach(path => {
+      import java.nio.channels.FileChannel
+      val fileChannel = FileChannel.open(path)
+      val fileSize = fileChannel.size
+      //println("Velicina datoteke " + path + " u bajtovima je: " + fileSize)
+      sizes.append(fileSize)
+      fileChannel.close()
+    })
+
+    sizes = sizes.sortWith(_<_)
+    println("Sorted sizes: " + sizes.toString())
+    var sum = sizes.sum
+    println("Sum before: " + sum)
+
+    /* ukoliko ima vise datoteka od pocetnog maksimalnog broja Worker-a, treba izbaciti njihove velicine iz sume */
+    if(sizes.size > numberOfCores*3){
+      println("Ima vise datoteka od procesora")
+      val diff: Int = sizes.size - numberOfCores*3
+      sizes = sizes.drop(diff)
     }
-    finally {
-      return;
+    /* ukoliko ima manje datoteka od pocetnog maksimalnog broj Worker-a, pocetni maks. broj Worker-a se menja na broj datoteka */
+    else if(sizes.size < numberOfCores*3) {
+      maxWorkers = sizes.size
+      println("Ima manje datoteka nego numberOfCores*3: " + maxWorkers + " < " + numberOfCores*3)
     }
-  }
- //! println("------------------ !destroyedManually: " + destroyedManually)
-  /* upisujemo datoteku koja je uzrokovala gresku u direktorijum fuzzedPDFError */
-  var fileError = ".\\fuzzedPDFError\\" + number + "_fuzzed.pdf"
-/*  if (!Files.exists(Paths.get(fileError))) {
-    val file = new File(fileError)
-    file.createNewFile();
-  }
-  else
-    FileChannel.open(Paths.get(fileError), StandardOpenOption.WRITE).truncate(0).close()
-*/
-  val to = Paths.get(fileError)
-  Files.copy(path, to);
 
-  var fileName = ".\\results\\";
-  if (!err.isEmpty)
-    fileName = fileName + "ERR_";
-  /* ako se program ugasio sam a nije sacekao da ga unisti glavni program */
-  if(!destroyedManually)
-    fileName = fileName + "CRASH_";
-  fileName = fileName + number + ".txt";
-  //println("Filename: " + fileName)
-  /* pravimo datoteku za ispis ako vec ne postoji, ako postoji, onda je cistimo da se podaci ne bi nadovezivali */
-  if (!Files.exists(Paths.get(fileName))) {
-    val file = new File(fileName)
-    file.createNewFile();
-  }
-  else
-    FileChannel.open(Paths.get(fileName), StandardOpenOption.WRITE).truncate(0).close()
+    sum = sizes.sum
+    println("Sum after : " + sum)
+    println("Sorted sizes: " + sizes.toString())
+    while(sum*2 >= presumableFreeMemory && !sizes.isEmpty){
+      println(sum*2 + " < " + presumableFreeMemory + " => smanjujemo za 1")
+      sizes = sizes.tail
+      println("Sorted sizes: " + sizes.toString())
+      maxWorkers -= 1
+      sum = sizes.sum
+    }
+    if(sizes.isEmpty){
+      println("Prazna lista: nijedna datoteka ne moze stati u memoriju!")
+      return 0
+    }
 
-  /* STDOUT deo */
-  Files.write(Paths.get(fileName), "STDOUT:\n\n".getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
-  for (elem <- out) {
-    var elem2 = elem + "\n";
-    Files.write(Paths.get(fileName), elem2.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+    println("Maksimalni broj Worker objekata je: " + maxWorkers)
+    maxWorkers
   }
-  /* STDERR deo */
-  Files.write(Paths.get(fileName), "\n\nSTDERR:\n\n".getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
-  for (elem <- err) {
-    var elem2 = elem + "\n";
-    Files.write(Paths.get(fileName), elem2.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+
+  /* svi podaci o izvrsavanju programa se upisuju u datoteku odgovarajuceg naziva */
+  def writeToFile(number: Int, out: ArrayBuffer[String], err: ArrayBuffer[String], exitCode : Int, destroyedManually : Boolean) {
+    /* naziv datoteke se pravi na osnovu broja Actor-a, i na osnovu toga da li je doslo do greske (postoje podaci u stderr) */
+    /* ovo dodajem da ne bi ispisivao rezultate procesa koji nisu uzrokovali gresku pdf citaca */
+
+    val path = Paths.get(".\\fuzzedPDFcorpus\\" + number + "_fuzzed.pdf");
+    //val path = Paths.get(".\\prepisivanje.pdf");
+    if(destroyedManually /*&& false*/){ // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      //!  println("------------------ destroyedManually " + destroyedManually)
+      /* posto nije doslo do greske, brisemo izmenjeni pdf iz foldera fuzzedPDFcorpus */
+      import java.io.IOException
+      import java.nio.file.DirectoryNotEmptyException
+      import java.nio.file.Files
+      import java.nio.file.NoSuchFileException
+      try
+        Files.delete(path)
+      catch {
+        case x: NoSuchFileException =>
+          System.err.format("%s: no such" + " file or directory%n", path)
+        case x: DirectoryNotEmptyException =>
+          System.err.format("%s not empty%n", path)
+        case x: IOException =>
+          // File permission problems are caught here.
+          System.err.println(x)
+      }
+      finally {
+        return;
+      }
+    }
+    //! println("------------------ !destroyedManually: " + destroyedManually)
+    /* upisujemo datoteku koja je uzrokovala gresku u direktorijum fuzzedPDFError */
+    var fileError = ".\\fuzzedPDFError\\" + number + "_fuzzed.pdf"
+    /*  if (!Files.exists(Paths.get(fileError))) {
+        val file = new File(fileError)
+        file.createNewFile();
+      }
+      else
+        FileChannel.open(Paths.get(fileError), StandardOpenOption.WRITE).truncate(0).close()
+    */
+    val to = Paths.get(fileError)
+    if(Files.exists(to))
+      Files.delete(to)
+    Files.move(path, to);
+
+    var fileName = ".\\results\\";
+    if (!err.isEmpty)
+      fileName = fileName + "ERR_";
+    /* ako se program ugasio sam a nije sacekao da ga unisti glavni program */
+    if(!destroyedManually)
+      fileName = fileName + "CRASH_";
+    fileName = fileName + number + ".txt";
+    //println("Filename: " + fileName)
+    /* pravimo datoteku za ispis ako vec ne postoji, ako postoji, onda je cistimo da se podaci ne bi nadovezivali */
+    if (!Files.exists(Paths.get(fileName))) {
+      val file = new File(fileName)
+      file.createNewFile();
+    }
+    else
+      FileChannel.open(Paths.get(fileName), StandardOpenOption.WRITE).truncate(0).close()
+
+    /* STDOUT deo */
+    Files.write(Paths.get(fileName), "STDOUT:\n\n".getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+    for (elem <- out) {
+      var elem2 = elem + "\n";
+      Files.write(Paths.get(fileName), elem2.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+    }
+    /* STDERR deo */
+    Files.write(Paths.get(fileName), "\n\nSTDERR:\n\n".getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+    for (elem <- err) {
+      var elem2 = elem + "\n";
+      Files.write(Paths.get(fileName), elem2.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+    }
+    /* Povratna vrednost se pise na kraju */
+    var exitString : String = "\n\nEXIT CODE:\n" + exitCode + "\n";
+    Files.write(Paths.get(fileName), exitString.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
   }
-  /* Povratna vrednost se pise na kraju */
-  var exitString : String = "\n\nEXIT CODE:\n" + exitCode + "\n";
-  Files.write(Paths.get(fileName), exitString.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
-}
 
   /* ako je neki od vracenih podataka null */
-  def writeToFileNullValues(number: Int, out: List[String], err: List[String], PDFProcess : Process, destroyedManually : Boolean) {
+  def writeToFileNullValues(number: Int, out: ArrayBuffer[String], err: ArrayBuffer[String], PDFProcess : Process, destroyedManually : Boolean) {
     var fileName = ".\\results\\";
     fileName = fileName + "NULL_";
     if(!destroyedManually)
@@ -145,7 +412,7 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
 
   }
 
-/* u slucaju da je run metod vratio null, onda samo ispisujemo poruku u datoteku */
+  /* u slucaju da je run metod vratio null, onda samo ispisujemo poruku u datoteku */
   def writeToFile(number: Int, msg: String) {
     var fileName = ".\\results\\";
     fileName = fileName + "NULL_";
@@ -159,217 +426,81 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
     else
       FileChannel.open(Paths.get(fileName), StandardOpenOption.WRITE).truncate(0).close()
 
-      Files.write(Paths.get(fileName), msg.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
+    Files.write(Paths.get(fileName), msg.getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
   }
 
-  /* izvrsavanje komande date stringom */
-  def run(in: String): (List[String], List[String], scala.sys.process.Process) = {
-    val qb = Process(in) // scala.sys.process.ProcessBuilder
-    var out = List[String]()
-    var err = List[String]()
+  def readMemory(): Boolean = {
+    println("\n---------------- Memorija --------------------")
+    val maxMemory = Runtime.getRuntime().maxMemory()
+    val totalMemory = Runtime.getRuntime().totalMemory()
+    val freeMemory = Runtime.getRuntime().freeMemory()
+    val allocatedMemory = totalMemory - freeMemory
+    var presumableFreeMemory = maxMemory - allocatedMemory
+    println("maxMemory:                     " + maxMemory)
+    println("totalMemory:                    " + totalMemory)
+    println("freeMemory:                      " + freeMemory)
+    println("allocatedMemory:                 " + allocatedMemory)
+    println("presumableFreeMemory:          " + presumableFreeMemory)
+    println("Velicina svih datoteka:         147615280" + "\n")
+    if(presumableFreeMemory < maxMemory/2)
+      false
+    else true
+   /* if(presumableFreeMemory < maxMemory/5){
+      println("Cekam")
+      Thread.sleep(3000)
+      println("Gotovo cekanje")
+    }*/
 
-    //val PDFprocess: Process = Process("powershell scala .\\primer.scala") run (ProcessLogger((s) => { println("PL: " + s); },/*out ::= s */
-     //                                                                   (s) => { err ::= s; println("ER: " + s + "     duzina err: " + err.length);  }));
-    val PDFprocess: Process = qb run (ProcessLogger((s) => { /*println("PL: " + s);*/ out ::= s},
-                                                    (s) => { err ::= s; /*println("ER: " + s + "     duzina err: " + err.length); */ }));
-
-    /* bez ovog poziva, run se odmah vraca i vraca prazne rezultate! Ovako cekamo kraj izvrsavanja da se dobije povratna vrednost */
-    val exit: Int = PDFprocess.exitValue();
-    //println("Duzina err: " + err.length)
-    (out.reverse, err.reverse, PDFprocess)
-  }
-
-  /* kontrolise sve aktore koji generisu pokrecu pdf datoteke */
-  class Controler extends Actor {
-
-    /* broj zavrsenih PDF citanja i broj Actor-a */
-    var numberOfTerminations = 0;
-    val numberOfActors = 5;
-    var numberOdPDFsTested = 0;
-    var numberOfErrors = 0;
-    val workers: Array[ActorRef] = new Array[ActorRef](numberOfActors);
-
-    def pokreni() = {
-      import better.files._
-      import better.files.File._
-      println("Pokrecem Worker-e");
-      for(i <- 0 until numberOfActors) {
-        /* pravimo Actor-a i saljemo mu poruku za pokretanje */
-        workers(i) = context.actorOf(Props(new Worker(i, numberOfActors)), name = "myWorker-" + i);
-        context.watch(workers(i));
-        workers(i) ! "Pokreni";
-      }// end for
-    }
-
-    def writeTestResults(msg: String): Unit ={
-      var fileName = ".\\results\\allTestResults.txt";
-     //      println("Filename: " + fileName)
-      /* pravimo datoteku za ispis ako vec ne postoji */
-      if (!Files.exists(Paths.get(fileName))) {
-        val file = new File(fileName)
-        file.createNewFile();
-      }
-      var info = new StringBuilder("\n--------------------------------------------------\n");
-      reader match {
-        case 1 => info.append("\tTestiran citac: Foxit PDF Reader\n");
-        case 2 => info.append("\tTestiran citac: Slim PDF Reader\n");
-        case 3 => info.append("\tTestiran citac: Sumatra PDF Reader\n");
-        case _ => info.append("\tTestiran nepoznati citac\n");
-      }
-      info.append("\t"+msg)
-      info.append("\n--------------------------------------------------\n");
-      Files.write(Paths.get(fileName), info.toString().getBytes(StandardCharsets.UTF_8), StandardOpenOption.APPEND)
-    }
-
-    def quit(): Unit ={
-      /* Upisujemo podatke o testiranju */
-      val msg = "............... Ukupno je testirano je: " + numberOdPDFsTested + " datoteka, a pronadjeno je: " + numberOfErrors + " gresaka. ................";
-      writeTestResults(msg);
-      println(msg)
-      println("............... Gasim sistem ................")
-      context.system.terminate();
-    }
-
-    def receive = {
-      case "Pokrenuto" => println("Pokrenuto: " + context.sender().path.name);
-      case "Pocni!" => println("\nMain kaze pocni!"); pokreni();
-      case "Testirano" => numberOdPDFsTested+=1;
-      case "Greska" => numberOfErrors+=1; numberOdPDFsTested+=1;
-      case Terminated(x) => {
-        println(x + " terminated")
-        numberOfTerminations+=1;
-        if(numberOfTerminations == numberOfActors) {
-          quit()
-        }
-      };
-      case x => println("Posiljaoc " + context.sender().toString() + " kaze " + x);
-    } // end receive blok
-
-  }//end Class Controler
-
-  /* pokrece pdf */
-  class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
-    /* podaci koji se dobijaju pokretanjem PDF citaca metodom run */
-    /* proces koji predstavlja pokrenut PDF citac, bice ugasen nakon 5 sekundi od pokretanja */
-    var PDFprocess : Process = null;
-    var out : List[String] = List[String]();
-    var err : List[String] = List[String]();
-    var exitCodeFuture : Unit = null;
-    var exitCode: Int = 0;
-    var tuple : Tuple3[List[String], List[String], Process] = null;
-    var destroyedManually: Boolean = true;
-    var numberOfIterations = 1;
-    var numberComplete = number;
-
-    def receive = {
-      case "Pokreni" => {
-        try {
-         /* pravimo datoteku */
-          val fileNumber = numberComplete % 20;
-          val fileName: String = ".\\PDFcorpus\\" + fileNumber + ".pdf";
-          val PDFparser = new ParserPDF(fileName, numberComplete);
-          PDFparser.readFileBinary()
-        //!  println("Actor broj " + numberComplete + " je izmenio svoj fajl i sada ga pokrece.")
-
-          val readerPart = new StringBuilder();
-          readerPart.append(".\\PDF_citaci\\")
-          reader match {
-            case 1 => readerPart.append("Foxit\\FoxitReader.exe ");
-            case 2 => readerPart.append("slim\\SlimPDFReader.exe ");
-            case 3 => readerPart.append("sumatra\\SumatraPDF.exe ");
-            case 4 => readerPart.append("visagesoft\\vspdfreader.exe ");
-            case 5 => readerPart.append("evince\\Evince.lnk ")
-          }
-
-          val command = readerPart.toString + ".\\fuzzedPDFcorpus\\" + numberComplete + "_fuzzed.pdf";
-          /* za 8 sekundi saljemo poruku stop sami sebi */
-          timers.startSingleTimer("key", "stop", 5000 milliseconds);
-
-          val qb: ProcessBuilder = Process(command) // scala.sys.process.ProcessBuilder
-          PDFprocess = qb run (ProcessLogger((s) => {/*println("PL: " + s); */out ::= s},
-            (s) => { err ::= s; /*println("ER: " + s + "     duzina err: " + err.length); */ }));
-          }
-        catch {
-          case x => println("-------------- Exception " + x.getMessage + " caught: ---------------\n" + x.printStackTrace() + "\n");
-            self ! "stop";
-        }
-        finally {
-       }
-      }
-      case "stop" => {
-        //exitCode = PDFprocess.exitValue();
-        println("Gasim proces: " + context.self.path.name)
-//        "powershell taskkill /F /IM FoxitReader.exe".!
-        /* ako je uhvacen neki izuzetak, onda je PDFprocess = null */
-        if(PDFprocess == null){
-          println("Program " + numberComplete + " je zavrsio jer je uhvacen izuzetak.")
-        }
-        else {
-          /* pri normalnom izvrsavanju programa, proces je i dalje ziv jer se nije sam ugasio zbog greske */
-          if (PDFprocess.isAlive()) {
-            context.parent ! "Testirano";
-         //!   println("Program " + numberComplete + " je zavrsio sa unistavanjem tj. ugasen je rucno!");
-            PDFprocess.destroy();
-          }
-          /* ako se ugasio sam, to treba zabeleziti */
-          else {
-            destroyedManually = false;
-            context.parent ! "Greska";
-          //!  println("********** Program " + numberComplete + " je zavrsio bez unistavanja tj. sam se ugasio!")
-          }
-          exitCode = PDFprocess.exitValue()
-          out = out.reverse
-          err = err.reverse
-          /* upisivanje rezultata u datoteku */
-        //!  println("\n   (" + out + ", " + err + ", " + exitCode + ")");
-          if (out == null || err == null || PDFprocess == null) {
-            writeToFileNullValues(numberComplete, out, err, PDFprocess, destroyedManually);
-          }
-          else
-            writeToFile(numberComplete, out, err, exitCode, destroyedManually);
-        }
-
-        /* pokrecemo novu iteraciju */
-        if(numberOfIterations == iterations)
-           context.stop(self);
-        else{
-          numberOfIterations+=1;
-          //println("Povecali smo broj iteracija: " + numberOfIterations);
-          numberComplete = numberComplete+numberOfActors;
-          self ! "Pokreni";
-        }
-      };
-      case x => println("Sta kazes? " + x);
-    }//end receive
-
+    //println("Kolicina memorije na koju mozemo da racunamo pre izbacivanja izuzetka je: " + presumableFreeMemory + " b")
   }
 
   def main(args: Array[String]): Unit = {
 
+    println("Broj jezgara procesora: " + Runtime.getRuntime.availableProcessors())
+
+    println("Datoteke ukupno " + pdfsSize)
+
+    println("Broj datoteka u korpusu je: " + numberOfPdfs)
     try {
       /* Korisnik bira PDF citac koji ce biti testiran */
       import scala.io.StdIn
       var chosenReader = false;
       while (!chosenReader) {
-        println("--------------------------------------------------------------------------------\nOdaberite PDF citac - za odabir unesite broj pod kojim je naveden citac:")
+        println("--------------------------------------------------------------------------------\nOdaberite PDF citac - za odabir unesite broj pod kojim je naveden citac ili putanju do izvrsne datoteke nekog drugog citaca:")
         println("\t\t1) Foxit PDF Reader")
         println("\t\t2) Slim PDF Reader")
         println("\t\t3) Sumatra PDF Reader")
-        println("\t\t4) Expert PDF Reader")
-        println("\t\t4) Evince PDF Reader")
+        //        println("\t\t4) Expert PDF Reader")
+        //        println("\t\t4) Evince PDF Reader")
         chosenReader = true;
         val input = StdIn.readLine();
         input match {
           case "1" => { println("Odabrali ste Foxit PDF Reader"); reader = 1 }
           case "2" => { println("Odabrali ste Slim PDF Reader"); reader = 2 }
           case "3" => { println("Odabrali ste Sumatra PDF Reader"); reader = 3 }
-          case "4" => { println("Odabrali ste Expert PDF Reader"); reader = 4 }
-          case "5" => { println("Odabrali ste Evince PDF Reader"); reader = 5 }
-          case _ => {
-            println("Niste uneli validnu opciju, pokusajte ponovo:"); chosenReader = false;
+          //case "4" => { println("Odabrali ste Expert PDF Reader"); reader = 4 }
+          //case "5" => { println("Odabrali ste Evince PDF Reader"); reader = 5 }
+          case x => {
+            //println("Putanja: " + x)
+            if(Files.exists(Paths.get(x))) {
+              //println("Putanja je validna")
+              if(x.endsWith(".exe")) {
+                println("U pitanju je izvrsna datoteka")
+                path = x;
+              }
+              else {
+                chosenReader = false;
+                println("Nije u pitanju izvrsna datoteka!")
+              }
+            }
+            else {
+              println("Niste uneli validnu putanju, pokusajte ponovo:");
+              chosenReader = false;
+            }
           }
         }
       }
+      /* ....................... broj iteracija ..................... */
       println("Unesite broj iteracija ili -1 za izvrsavanje programa dok ga rucno ne zaustavite:")
       var numberIter = -2;
       while(numberIter == -2) {
@@ -385,6 +516,38 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
         else {
           println("Pogresno ste uneli; pokusajte ponovo:")
         }
+      }
+
+      /* ........................ broj worker-a .......................... */
+      var maxWorkers = getMaxWorkers()
+      println("Unesite broj Worker objekata: minimalan broj je 1 a maksimalan broj je "+maxWorkers)
+      while(numberOfWorkers == 0){
+        var in = StdIn.readLine()
+        if(in.matches("""\d{1,9}""")){
+          numberOfWorkers = in.toInt
+          numberOfWorkers match {
+            case x if x>maxWorkers => { println("Uneli ste preveliki broj; pokusajte ponovo:"); numberOfWorkers=0; }
+            case x if x<1 => { println("Uneli ste premali broj; pokusajte ponovo:"); numberOfWorkers=0; }
+            case x => { println("Odabrali ste " + x + " Worker objekata") }
+          }
+        }
+        else
+          println("Pogresno ste uneli; pokusajte ponovo:")
+      }
+
+      /* ........................ broj sekundi .......................... */
+      println("Unesite dozvoljen milisekundi za otvaranje jedne datoteke: broj > 0")
+      while(millisecs == 0){
+        var in = StdIn.readLine()
+        if(in.matches("""\d{1,9}""")){
+          millisecs = in.toInt
+          millisecs match {
+            case 0 => { println("Broj mora biti veci od 0; pokusajte ponovo:"); }
+            case x => { println("Odabrali ste " + x + " milisekundi") }
+          }
+        }
+        else
+          println("Pogresno ste uneli; pokusajte ponovo:")
       }
       println("--------------------------------------------------------------------------------");
     }
@@ -409,24 +572,24 @@ def writeToFile(number: Int, out: List[String], err: List[String], exitCode : In
     //val fileName: String = ".\\helloToParseAndChange.pdf";
     //val fileName: String = ".\\PDFcorpus\\10.pdf";
     //val PDFparser = new ParserPDF(fileName, 10);
-   // PDFparser.readLines()
+    // PDFparser.readLines()
     //PDFparser.readFileAsString()
 
-   // println(PDFparser.getAPiece(1293048) + " " + PDFparser.getAPiece(0) + " " + PDFparser.getAPiece(12000) + " " + PDFparser.getAPiece(5435)+ " " + PDFparser.getAPiece(483859673))
-  //  PDFparser.readFileBinary()
+    // println(PDFparser.getAPiece(1293048) + " " + PDFparser.getAPiece(0) + " " + PDFparser.getAPiece(12000) + " " + PDFparser.getAPiece(5435)+ " " + PDFparser.getAPiece(483859673))
+    //  PDFparser.readFileBinary()
 
 
- /*   var sb = new StringBuilder("a abc fja\n\nrgm aslm 45 abc ab c ");
-    println("SB pre: " + sb.toString())
-    PDFparser.replaceAllSB(sb, "abc", "CDEFG", 5)
-    println("SB posle: " + sb.toString())
-   */
+    /*   var sb = new StringBuilder("a abc fja\n\nrgm aslm 45 abc ab c ");
+       println("SB pre: " + sb.toString())
+       PDFparser.replaceAllSB(sb, "abc", "CDEFG", 5)
+       println("SB posle: " + sb.toString())
+      */
 
     //PDFparser.probam()
 
 
     //println(Double.MinValue.toString)
-//    PDFparser.getHeuristicString(".\\heuristics\\strings\\traversals.txt")
+    //    PDFparser.getHeuristicString(".\\heuristics\\strings\\traversals.txt")
     /* Ne koristiti CMD jer on ne vraca rezultat!!!!!!!!!!!!!!! */
     // Executes "ls" and sends output to stdout
     /*

@@ -58,7 +58,7 @@ EnableTeXEnhancements = false
 DefaultDisplayMode = automatic
 DefaultZoom = fit page
 WindowState = 1
-WindowPos = 402 0 562 728
+WindowPos = 21 6 480 320
 ShowToc = true
 SidebarDx = 150
 TocDy = 0
@@ -70,6 +70,6 @@ FileStates [
 SessionData [
 ]
 TimeOfLastUpdateCheck = 0 0
-OpenCountWeek = 399
+OpenCountWeek = 402
 
 # Settings after this line have not been recognized by the current version

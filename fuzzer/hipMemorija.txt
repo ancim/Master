@@ -1,0 +1,247 @@
+--------------------- na pocetku:
+maxMemory:              1884815360
+totalMemory:             128974848
+freeMemory:              109941320
+allocatedMemory:          19033528     = totalMemory-freeMemory
+presumableFreeMemory:   1865781832
+suma svih datoteka:      147615280
+
+15:12
+
+---------------------
+15:17
+
+maxMemory: 1926234112
+totalMemory: 1926234112
+freeMemory: 871649312
+allocatedMemory: 1054584800
+presumableFreeMemory: 871649312
+
+---------------------
+15:20
+
+maxMemory: 1884815360
+totalMemory: 1884815360
+freeMemory: 285941800
+allocatedMemory: 1598873560
+presumableFreeMemory: 285941800
+
+--------------------- na kraju:
+
+maxMemory:                        1884815360
+totalMemory:                      1884815360
+freeMemory:                        267055224
+allocatedMemory:                  1617760136
+presumableFreeMemory:              267055224
+velicina svih datoteka ukupno:     147615280					  
+
+-------------------------------------------------------------------------------------------------------------------------------
+--------------------- Program koji je radio ~ 1h i 45 min, na kraju (kada sam ga ja prekinula)					 
+
+maxMemory: 1935671296
+totalMemory: 1935671296
+freeMemory: 1394092640
+allocatedMemory: 541578656
+presumableFreeMemory: 1394092640
+
+-------------------------------------------------------------------------------------------------------------------------------
+
+------------- na pocetku:
+18:52
+
+presumableFreeMemory:             1865760704
+velicina svih datoteka ukupno:     147615280
+
+--------------- 19:03
+
+presumableFreeMemory na pocetku:  1865760704
+presumableFreeMemory:              661672936
+
+---------------------------------------------------------------------------------------------------------------------------------
+--------------- na pocetku: bez PDFprocess = null
+19:05
+
+presumableFreeMemory:             1865775656
+velicina svih datoteka ukupno:     147615280
+
+------------------ 19:14
+allocatedMemory: 516580608
+presumableFreeMemory na pocetku: 1865775656
+presumableFreeMemory:            1368234752
+
+----------------- 19:21
+
+presumableFreeMemory na pocetku: 1865775656
+presumableFreeMemory prethodno:  1368234752
+presumableFreeMemory:             378725616
+
+allocatedMemory prethodno:   516580608
+allocatedMemory:            1576344336
+
+----------------- 19:27 na kraju:
+
+presumableFreeMemory na pocetku: 1865775656
+presumableFreeMemory prethodno:   378725616
+presumableFreeMemory:             262499664
+
+allocatedMemory prethodno:   1576344336
+allocatedMemory:             1622315696
+
+maxMemory:   1884815360
+totalMemory: 1884815360
+freeMemory: 262499664 isto kao i presumableFreeMemory
+
+-------------------------------------------------------------------------------------------------------------------------------
+
+------------------ na pocetku: sa PDFprocess = null
+19:
+
+presumableFreeMemory:             
+velicina svih datoteka ukupno:     147615280
+
+---------------------------------------------------- PDFprocess = null i bez readFileBinary poziva funkcije
+21:23
+
+maxMemory:                        1884815360
+totalMemory:                       128974848
+freeMemory:                        109920632
+allocatedMemory:                    19054216
+presumableFreeMemory:             1865761144
+velicina svih datoteka ukupno:     147615280
+
+-------------------------------------------------------
+21:27
+
+maxMemory:                 1884815360
+totalMemory:                129499136
+freeMemory:                  90796472
+allocatedMemory:             38702664
+presumableFreeMemory pre:  1865761144
+presumableFreeMemory:      1846112696
+
+------------------------------------------------------------
+21:38
+
+maxMemory:                       1884815360
+totalMemory:                      120061952
+freeMemory:                        86772240
+allocatedMemory:                   33289712
+presumableFreeMemory pre2:       1865761144
+presumableFreeMemory pre 1:      1846112696
+presumableFreeMemory:            1851525648
+--------------------------------------------------------------
+21:47
+
+maxMemory:                     1884815360
+totalMemory:                    118489088
+freeMemory:                      90806824
+allocatedMemory:                 27682264
+presumableFreeMemory pre:      1851525648
+presumableFreeMemory:          1857133096
+velicina svih datoteka:         147615280
+
+------------------------------------------------------------------
+
+maxMemory:             1884815360
+totalMemory:            118489088
+freeMemory:              69669784
+allocatedMemory:         48819304
+presumableFreeMemory:  1835996056
+
+--------------------------------------------------------------------------------------------------------------------------------------------
+
+---------- Nakon prve ispravke -> sve na null -----------
+
+------- 18:35
+
+maxMemory:                     1884815360
+totalMemory:                    128974848
+freeMemory:                      109223088
+allocatedMemory:                 19751760
+presumableFreeMemory:          1865063600
+Velicina svih datoteka:         147615280
+
+--------- 18:
+umro
+------------------------------------------------------------------------------------------
+
+-- bez otvaranja datoteka
+
+21:20
+
+maxMemory:                     1884815360
+totalMemory:                    1379926016
+freeMemory:                      884502544
+allocatedMemory:                 495423472
+presumableFreeMemory:          1389391888
+Velicina svih datoteka:         147615280
+
+21:21
+
+maxMemory:                     1884815360
+totalMemory:                    1415577600
+freeMemory:                      490010520
+allocatedMemory:                 925567080
+
+presumableFreeMemory:         1389391888
+presumableFreeMemory:          959248280
+presumableFreeMemory:         1273695072
+presumableFreeMemory:          458499792
+                               827326432
+presumableFreeMemory:          757389544
+                              1152050128
+presumableFreeMemory:          600795600
+presumableFreeMemory:          640948448
+presumableFreeMemory:          914698280
+presumableFreeMemory:         1183407984
+presumableFreeMemory:         1519263344
+presumableFreeMemory:          623873680
+presumableFreeMemory:         1022275384
+presumableFreeMemory:          321686712
+presumableFreeMemory:         1246318496
+presumableFreeMemory:          898693520
+presumableFreeMemory:          376795544
+21:51
+presumableFreeMemory:         1512195176
+
+Velicina svih datoteka:         14761528
+
+ja ugasila
+
+---------------------------------------------------------------------------------------------------------------------------------------------------
+-- sa Thread.sleep(3000) u readMemory funkciji ali je bilo maxMemory/10
+
+22:02
+
+maxMemory:                     1884815360
+totalMemory:                    128974848
+freeMemory:                      109379072
+allocatedMemory:                 19595776
+presumableFreeMemory:          1865219584
+Velicina svih datoteka:         147615280
+22:21
+presumableFreeMemory:          277208704
+
+nije umro al je stao i ja sam ga ugasila u 22:29
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+-- sa Thread.sleep(3000) u readMemory funkciji sa maxMemory/51
+
+22:30
+
+maxMemory:                     1884815360
+totalMemory:                    128974848
+freeMemory:                      109376600
+allocatedMemory:                 19598248
+presumableFreeMemory:          1865217112
+Velicina svih datoteka:         147615280
+
+----------------------------------------- sa VISUALVM --------------------------------------------------------------
+
+-- heap dumps se nalaze u: 
+C:\Users\Ancha\AppData\Local\Temp\visualvm.dat\localhost_1960\heapdump-1536070217189.hprof
+
+-- 3 -1 10 1200
+	zablokirao je nakon malo manje od pola sata
+	Java heap space u roku od 10 min
+-- 3 -1 15 1200
+	- sa postavljenim cekanjem od 2 sekunde kad nema bar trecina memorije 
