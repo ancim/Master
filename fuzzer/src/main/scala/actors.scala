@@ -11,7 +11,7 @@ import akka.actor.Timers
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 import java.nio.channels.FileChannel
-import java.nio.charset.StandardCharsets
+import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.StandardOpenOption
 import java.nio.file.{Files, Paths}
 
@@ -456,10 +456,25 @@ object actors {
 
   def main(args: Array[String]): Unit = {
 
+    /* proveravamo argumente komandne linije */
+    if(!args.isEmpty){
+      if(args.length != 1) println("Dozvoljen je najvise jedan argument komandne linije.")
+      else {
+        val arg = args.head
+        if(arg != "--help") {
+          println("Pogresno ste uneli argument.")
+        }
+        else {
+          println("Birate uputstvo")
+          val lines = Files.readAllLines(Paths.get("help.txt"), Charset.forName("UTF-8")).toArray()
+          for(line <- lines)
+            println(line)
+          }
+      }
+    }
+
     println("Broj jezgara procesora: " + Runtime.getRuntime.availableProcessors())
-
     println("Datoteke ukupno " + pdfsSize)
-
     println("Broj datoteka u korpusu je: " + numberOfPdfs)
     try {
       /* Korisnik bira PDF citac koji ce biti testiran */

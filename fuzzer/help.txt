@@ -1,0 +1,45 @@
+***************************************************************************************************************************************************************
+Autor programa: Ana Mitrović
+
+Svrha i način rada programa: 
+	Program služi za testiranje čitača PDF datoteka. Odabrana je tehnika rasplinutog testiranja, koja podrazumeva 
+	testiranje pokretanjem programa sa slučajno generisanim ulaznim parametrima ili ulaznim parametrima koji su predviđeni da 
+	izazovu grešku u programu. U ovom slučaju ulazni parametar u program koji se testira predstavlja PDF datoteka. Zbog toga ovaj
+	program generiše PDF datoteke menjajući sadržaj postojećih PDF datoteka (koje se nalaze u direktorijumu "PDFcorpus") i potom
+	te datoteke otvara u odabranom PDF čitaču. Otvaranje datoteke u čitaču se odvija kao zaseban spoljašnji proces. Kada prođe nekoliko 
+	sekundi od otvaranja PDF datoteke u čitaču, program pokušava da detektuje da li je došlo do neke greške u radu čitača analizirajući 
+	izlaz i trenutno stanje čitača (da li se ugasio, da li je ispisao neke greške, itd.). Program podržava konkurentno i paralelno 
+	izvršavanje, tj. proces generisanja PDF datoteka i njihovo otvaranje u čitaču se odvija u nekoliko komponenti istovremeno 
+	(broj komponenti zavisi od odabira korisnika i računara na kom se obavlja testiranje). Svaka komponenta menja sadržaj svoje PDF 
+	datoteke, otvara je u čitaču i potom analizira rezultat. Ukoliko je detektovana greška u radu čitača, dokumentuju se:
+		- datoteka koja je izazvala grešku: u direktorijumu "fuzzedPDFError", 
+		- tekstualna datoteka sa podacima o izvršavanju programa: u direktorijumu "results". Podaci obuhvataju standardni izlaz, 
+		  standardni izlaz za greške i izlaznu vrednost programa.
+		Ova dva podatka u svom nazivu imaju redni broj komponente tj. identifikator koji ih povezuje, npr:
+		datoteka pod nazivom "6_fuzzed.pdf" i tekstualna datoteka pod nazivom "CRASH_6.txt" zajedno opisuju jednu grešku u radu čitača.
+		
+Upotreba programa:  
+	1. Pre početka testiranja podesiti PDF čitač koji ćete testirati tako da svaku datoteku otvara u novom prozoru (ovo nije potrebno ukoliko
+	   birate neki od ponuđenih čitača - pogledati stavku 4.1). Ukoliko čitač ne podržava ovakav način rada, ovaj program ne može testirati 
+	   taj čitač
+	2. Pre početka testiranja odrediti prosečno vreme koje je potrebno PDF čitaču da otvori datoteke (neki čitači su brži a neki sporiji).
+	   Ovo je važno zbog unošenja ulaznog parametra "broj milisekundi" koji je definisan ispod (stavka 4.4).
+	   Ukoliko birate neki od ponuđenih čitača, preporučen broj milisekundi je:
+			- Foxit    --  1500ms
+			- Slim     --  3000ms
+			- Sumatra  --  1200ms
+	3. Direktorijum "PDFcorpus" se može proizvoljno menjati, tj. u njega se mogu dodavati nove datoteke, iz njega se mogu 
+	   brisati i menjati postojeće datoteke
+	4. Pokretanjem programa traži se unošenje ulaznih parametara:
+		4.1 PDF čitač koji će biti testiran: možete izabrati jedan od ponuđenih čitača (u tom slučaju nije potreban korak 1 jer su već podešeni)
+		    ili uneti putanju do izvršne datoteke nekog drugog čitača
+		4.2 broj Worker objekata: broj komponenti koje će konkurentno ili paralelno vršiti testiranje čitača. Donja granica je 1, a gornja
+		    je izračunata na osnovu slobodne memorije i broja jezgara procesora računara sa kog se vrši testiranje 
+		4.3 broj iteracija: broj datoteka koje će generisati i otvoriti svaki od Worker objekata. U slučaju unošenja broja -1, Worker objekti 
+		    generišu i otvaraju datoteke dok korisnik ne zaustavi izvršavanje programa
+		4.4 broj milisekundi: vreme koje se daje za otvaranje PDF datoteke u čitaču. Nakon isteka ovog vremena, sledi analiza
+		    stanja PDF čitača i detektovanje da li se dogodila greška. Zbog toga je važno dati čitaču dovoljno vremena za otvaranje
+		    datoteke: ukoliko mu se da premalo vremena, program može detektovati da se čitač ugasio zbog greške kada zapravo nije ni stigao
+		    da otvori datoteku
+		  
+***************************************************************************************************************************************************************

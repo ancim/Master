@@ -1,5 +1,0 @@
-
---------------------------------------------------
-	Testiran citac: Foxit PDF Reader
-	............... Ukupno je testirano je: 15 datoteka, a pronadjeno je: 0 gresaka. ................
---------------------------------------------------
