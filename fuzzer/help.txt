@@ -28,6 +28,8 @@ Upotreba programa:
 			- Foxit    --  1500ms
 			- Slim     --  3000ms
 			- Sumatra  --  1200ms
+		Iako je ovo preporučen broj milisekundi, u zavisnosti od računara je nekada potrebno više milisekundi. Zbog toga je preporučljivo proveriti 
+		pre izvršavanja programa.
 	3. Direktorijum "PDFcorpus" se može proizvoljno menjati, tj. u njega se mogu dodavati nove datoteke, iz njega se mogu 
 	   brisati i menjati postojeće datoteke
 	4. Pokretanjem programa traži se unošenje ulaznih parametara:

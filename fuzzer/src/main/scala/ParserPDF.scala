@@ -1,8 +1,7 @@
 import java.io.{BufferedOutputStream, File, FileOutputStream}
 import java.nio.channels.FileChannel
 import java.nio.charset.{Charset, StandardCharsets}
-import java.nio.file.{Files, Paths, StandardOpenOption}
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
@@ -118,10 +117,10 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       if (choice >= 0 && choice < 500) {
         var filename: StringBuilder = new StringBuilder();
         Random.nextInt(4) match {
-          case 0 => filename.append("strings\\formatStrings.txt");
-          case 1 => filename.append("strings\\naughtyStrings.txt");
-          case 2 => filename.append("strings\\traversals.txt");
-          case 3 => filename.append("strings\\upsideDownText.txt");
+          case 0 => filename.append("strings/formatStrings.txt");
+          case 1 => filename.append("strings/naughtyStrings.txt");
+          case 2 => filename.append("strings/traversals.txt");
+          case 3 => filename.append("strings/upsideDownText.txt");
         }
         var result = new StringBuilder("(");
         result.append(getHeuristicString(filename.toString()));
@@ -150,9 +149,9 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     if (Random.nextInt(2) == 1) {
       var filename: String = null;
       if (Random.nextInt(2) == 1)
-        filename = "strings\\naughtyStrings.txt";
+        filename = "strings/naughtyStrings.txt";
       else
-        filename = if (integer) "ints\\integerOverflows.txt" else "reals\\realOverflows.txt";
+        filename = if (integer) "ints/integerOverflows.txt" else "reals/realOverflows.txt";
       getHeuristicString(filename);
     }
     else if (integer)
@@ -162,11 +161,16 @@ class ParserPDF(fileName: String, actorNumber: Int) {
   }
 /*
   def generateMethod(): String = {
-    getHeuristicString("commonNames\\commonMethodNames.txt")
+    getHeuristicString("commonNames/commonMethodNames.txt")
   }
 */
   def getHeuristicString(fileName: String): String = {
-    var lines = Source.fromFile(".\\heuristics\\" + fileName, "ISO-8859-1").getLines().toArray
+    import scala.collection.JavaConverters._
+    //val lines: Array[String] = Source.fromFile("./heuristics/" + fileName, "ISO-8859-1").getLines().toArray
+    var lines: Array[String] = Files.readAllLines(Paths.get("./heuristics/" + fileName), Charset.forName("ISO-8859-1")).asScala.toArray
+    /*if(lines.deep != lines2.deep)
+      println(" ___________________________________ Nisu jednaki!" + " Velicine: " + lines.size + " " + lines2.size)
+    else println("_ Jednaki su!")*/
     val numberOfLines = lines.size
     //println("\tFajl " + fileName + " ima " + numberOfLines + " linija")
     val lineNumber = Random.nextInt(numberOfLines)
@@ -307,7 +311,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
         case 2 => r.nextInt(10)+1//sizeContent / 3
         case 3 => r.nextInt(21)+30//sizeContent / 10//6
         case 4 => r.nextInt(51)+100//sizeContent / 200//100
-        case 5 => println("5 cifara"); r.nextInt(600)+1000//sizeContent / 5000//500
+        case 5 => /*println("5 cifara");*/ r.nextInt(600)+1000//sizeContent / 5000//500
         case 6 => r.nextInt(20000)+10000//sizeContent / 2000//1000
         case 7 => r.nextInt(200000)+100000//sizeContent*3 / 10000//1000
         case 8 => r.nextInt(3000000)+1000000//sizeContent*3 / 10000//1000
@@ -483,17 +487,17 @@ class ParserPDF(fileName: String, actorNumber: Int) {
           if(skipping == 3 || skipping == 6){
             skipping+=1
             toSkip = skipContent
-            println("Preskacemo srednji deo..." + toSkip)
+            //println("Preskacemo srednji deo..." + toSkip)
           }
           else if(skipping == 10){
             skipping = 0
             toSkip = skipContent*2
-            println("Preskacemo veliki deo..." + toSkip)
+            //println("Preskacemo veliki deo..." + toSkip)
           }
           else {
             skipping+=1
             toSkip = skipContent/2
-            println("Preskacemo mali deo..." + toSkip)
+            //println("Preskacemo mali deo..." + toSkip)
           }
           changedObjectsBuilder.append(noStreamsBuilder.slice(stringEndIndex, stringEndIndex+toSkip))
 
@@ -566,7 +570,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       println(" NE SLAZE SE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
     /** .................................... zapisujemo sav novi sadrzaj u novi fajl ....................................... */
-    var newContentFile: String = ".\\fuzzedPDFcorpus\\" + actorNumber.toString + "_fuzzed.pdf";
+    var newContentFile: String = "./fuzzedPDFcorpus/" + actorNumber.toString + "_fuzzed.pdf";
     //println("Novi fajl: " + newContentFile)
     //var newContentFile = new File(newContentName);
     //newContent.
