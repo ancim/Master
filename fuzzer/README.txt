@@ -3,11 +3,16 @@ Korisni direktorijumi:
 - - - - - - - - - - - - - - - - - - -
 	Čitav program i propratni materijali se nalaze u direktorijumu "fuzzer". 
 	- Korisni poddirektorijumi su:
-	  - "PDFcorpus": sadrži validne PDF datoteke koje ce program mutirati. U ovaj direktorijum se po želji mogu smeštati nove i brisati postojeće datoteke
-	  - "PDF_citaci": sadrži PDF čitače koji su ponuđeni u programu
+	  - "PDFcorpus": sadrži ispravne datoteke formata PDF koje ce program mutirati. U ovaj direktorijum se po želji mogu smeštati nove i brisati postojeće 
+	  datoteke. Pre pocetka samog testiranja, program preimenuje datoteke ovog direktorijuma tako da im nazivi budu formata "redniBroj___nazivDatoteke.pdf".
+	  pri cemu je "nazivDatoteke" stari naziv datoteke, tj. naziv datoteke pre preimenovanja.
+	  Na primer, datoteka "Programming Language Pragmatics (3ed., Elsevier, 2009) Scott M.L .pdf" moze biti preimenovana u 
+                        "15___Programming Language Pragmatics (3ed., Elsevier, 2009) Scott M.L .pdf".
+						
+	  - "PDF_citaci": sadrži čitače datoteka formata PDF koji su ponuđeni u programu
 	  - "heuristics": sadrži tekstualne datoteke sa vrednostima različitih tipova koje često izazivaju greške u programima
 	- Pri pronalasku greške u čitaču, informacije o tome se čuvaju u sledeća dva direktorijuma:
-		- "fuzzedPDFError": sadrži PDF datoteke koja su izazvale greške u radu čitača
+		- "fuzzedPDFError": sadrži datoteke formata PDF koja su izazvale greške u radu čitača
 		- "results": sadrži tekstualne datoteke u kojima se nalaze informacije o standardnom izlazu, standardnom izlazu za greške i izlaznoj vrednosti čitača
   
 	- Korisne datoteke su:

@@ -12,9 +12,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success}
 import java.nio.channels.FileChannel
 import java.nio.charset.{Charset, StandardCharsets}
-import java.nio.file.StandardOpenOption
-import java.nio.file.{Files, Paths}
+import java.nio.file._
 import java.util.Locale
+import java.io.IOException
+import java.nio.file.DirectoryStream
+import java.nio.file.Files
+import java.nio.file.Paths
+
+import akka.dispatch.Dispatchers
 
 import scala.collection.mutable.ArrayBuffer
 import scala.io.StdIn
@@ -73,9 +78,18 @@ class Controler extends Actor {
   def receive = {
     case "Pokrenuto" => println("Pokrenuto: " + context.sender().path.name);
     case "Pocni!" => println("\nMain kaze pocni!"); start();
-    case "Testirano" => numberOdPDFsTested+=1;
-    case "Greska" => numberOfErrors+=1; numberOdPDFsTested+=1;
-    case Terminated(x) => {
+    case "Testirano" => {
+      numberOdPDFsTested+=1
+      if(numberOdPDFsTested % 10 == 0)
+        println("Za sada je testirano " + numberOdPDFsTested + " datoteka i pronadjeno " + numberOfErrors + " gresaka.")
+    };
+    case "Greska" => {
+      numberOfErrors+=1
+      numberOdPDFsTested+=1;
+      if(numberOdPDFsTested % 10 == 0)
+        println("Za sada je testirano " + numberOdPDFsTested + " datoteka i pronadjeno " + numberOfErrors + " gresaka.")
+    };
+      case Terminated(x) => {
       println(x + " terminated")
       numberOfTerminations+=1;
       if(numberOfTerminations == numberOfActors) {
@@ -105,15 +119,19 @@ class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
   def receive = {
     case "Pokreni" => {
       System.gc()
-        if (readMemory() == false) {
+        /*if (readMemory() == false) {
 //          println(".............. Cekam 2 sekunde ..............")
           timers.startSingleTimer("key", "Pokreni", 0 milliseconds); // !!!!!!!!!!!! bilo 2000
-        }
+        }*/
+      if(false){}
         else {
           try {
           /* pravimo datoteku */
           val fileNumber = numberComplete % numberOfPdfs;
-          val fileName: String = "./PDFcorpus/" + fileNumber + ".pdf";
+          val fileName = Files.list(Paths.get("./PDFcorpus/")).filter(p => {
+            p.getFileName.toString.startsWith(fileNumber + "___")
+          }).findFirst().get().toString
+          //val fileName: String = "./PDFcorpus/" + fileNumber + ".pdf";
           val PDFparser = new ParserPDF(fileName, numberComplete);
           PDFparser.readFileBinary()
           //PDFparser = null
@@ -122,7 +140,7 @@ class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
           val readerPart = new StringBuilder();
           /* ako se program izvrsava na Linux operativnom sistemu, pre komande citaca ide komanda 'wine' */
           if(OS == "Linux") {
-            println("Linux operativni sistem")
+            //println("Linux operativni sistem")
             val listOfExecutablesWindows = Array(".bat", ".exe", ".bin", ".cmd", ".com", ".cpl", ".gadget", ".inf", ".ins", ".inx", ".inx", ".isu", ".job", ".jse",
               ".lnk", ".msc", ".msi", ".msp", ".mst", ".paf", ".pif", ".ps1", ".reg", ".rgs", ".scr", ".sct", ".shb", ".shs", ".u3p", ".vb",
               ".vbe", ".vbs", ".vbscript", ".ws", ".wsf", ".wsh")
@@ -161,7 +179,7 @@ class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
         }
         catch {
           case x => println("-------------- Exception " + x.getMessage + " caught: ---------------\n" + x.printStackTrace() + "\n");
-            self ! "stop";
+            self ! "stop"; //
         }
         finally {
         }
@@ -182,6 +200,9 @@ class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
           context.parent ! "Testirano";
           //!   println("Program " + numberComplete + " je zavrsio sa unistavanjem tj. ugasen je rucno!");
           PDFprocess.destroy();
+          Thread.sleep(500)
+          exitCode = PDFprocess.exitValue()
+          println("Povratna vrednost je: " + exitCode)
           writeToFile(numberComplete, out, err, exitCode, destroyedManually);
          /* if(PDFprocess.isAlive())
             println("Proces " + numberComplete + " je ziv nakon ubijanja!")*/
@@ -196,6 +217,7 @@ class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
           exitCode = PDFprocess.exitValue()
           /* upisivanje rezultata u datoteku */
           println("Proces " + numberComplete + " ima rezultate: " + exitCode + "\nOut: \n" + out + "\nErr: \n" + err + "\n")
+          Thread.sleep(500)
           if (out == null || err == null || PDFprocess == null) {
             writeToFileNullValues(numberComplete, out, err, PDFprocess, destroyedManually);
           }
@@ -216,6 +238,7 @@ class Worker(number: Int, numberOfActors: Int) extends Actor with Timers {
         numberOfIterations+=1;
         //println("Povecali smo broj iteracija: " + numberOfIterations);
         numberComplete = numberComplete+numberOfActors;
+        destroyedManually = true;
         self ! "Pokreni";
       }
     };
@@ -230,7 +253,42 @@ object actors {
   var numberOfWorkers = 0;
   var millisecs = 0;
   var path = ""
-  var numberOfPdfs = Files.list(Paths.get("./PDFcorpus/")).count()
+  var numberOfPdfs = {
+    var i = 0
+    /* pre nego sto vratimo broj datoteka, numerisemo ih od 0-... tako da im nazivi budu 0.pdf, 1.pdf, itd... */
+    try {
+      val tempDir: Path = Files.createTempDirectory(Paths.get("."), "temp")
+      val PDFcorpus: Path = Paths.get("./PDFcorpus/")
+      println("Preimenovane datoteke:")
+      Files.list(PDFcorpus).forEach(file => {
+        var fileName = file.getFileName.toString
+        //println("Putanja: " + file + ", ime datoteke: " + fileName)
+        if(fileName.matches("[0-9]+___(.)*")){
+          fileName = fileName.substring(fileName.indexOf("___")+3)
+        }
+        val newFile = Files.move(file, tempDir.resolve("" + i + "___" + fileName), StandardCopyOption.REPLACE_EXISTING)
+        println("Datoteka: " + file.toString.substring(file.toString.lastIndexOf("\\")+1) + " -> " + newFile.toString.substring(newFile.toString.lastIndexOf("\\")+1))
+        i += 1
+      })
+
+      Files.list(tempDir).forEach(file => {
+        val newFile = Files.move(file, PDFcorpus.resolve(file.getFileName), StandardCopyOption.REPLACE_EXISTING)
+        //println("Datoteka: " + file + " -> " + newFile)
+      })
+      Files.delete(tempDir)
+    }
+    catch {
+      case x: AccessDeniedException => println("Nije uspelo kreiranje direktorijuma! " + x.getLocalizedMessage)
+      case ex: IOException => ex.printStackTrace()
+      case _ => println("Nije uspelo kreiranje direktorijuma! ")
+    }
+    finally {
+
+    }
+    println("Datoteka ima: " + i)
+  i
+  }
+
   val OS = {
     val os = System.getProperty("os.name").toLowerCase(Locale.ENGLISH)
     if (os.indexOf("win") >= 0)
@@ -316,31 +374,33 @@ object actors {
   def writeToFile(number: Int, out: ArrayBuffer[String], err: ArrayBuffer[String], exitCode : Int, destroyedManually : Boolean) {
     /* naziv datoteke se pravi na osnovu broja Actor-a, i na osnovu toga da li je doslo do greske (postoje podaci u stderr) */
     /* ovo dodajem da ne bi ispisivao rezultate procesa koji nisu uzrokovali gresku pdf citaca */
-
-    val path = Paths.get("./fuzzedPDFcorpus/" + number + "_fuzzed.pdf");
-    //val path = Paths.get("./prepisivanje.pdf");
-    if(destroyedManually /*&& false*/){ // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    val filePath = Paths.get("./fuzzedPDFcorpus/" + number + "_fuzzed.pdf");
+     //val path = Paths.get("./prepisivanje.pdf");
+    if(destroyedManually /*&& false*/) { //
       //!  println("------------------ destroyedManually " + destroyedManually)
       /* posto nije doslo do greske, brisemo izmenjeni pdf iz foldera fuzzedPDFcorpus */
       import java.io.IOException
       import java.nio.file.DirectoryNotEmptyException
       import java.nio.file.Files
       import java.nio.file.NoSuchFileException
+      var succeded = true;
       try {
-        println("Brisem: " + path)
-        Files.delete(path)
-
-      }catch {
+        succeded = true
+        println("Brisem: " + filePath)
+        Thread.sleep(500)
+        Files.delete(filePath)
+      }
+      catch {
         case x: NoSuchFileException =>
-          System.err.format("%s: no such" + " file or directory%n", path)
+          System.err.format("%s: no such" + " file or directory%n", filePath)
         case x: DirectoryNotEmptyException =>
-          System.err.format("%s not empty%n", path)
+          System.err.format("%s not empty%n", filePath)
         case x: IOException =>
           // File permission problems are caught here.
-          System.err.println(x)
+          System.err.println("Ovde:\n\n\n " + x + "   " + x.getLocalizedMessage + "   " + x.getMessage + " \n\n\n")
       }
       finally {
-        return;
+          return;
       }
     }
     //! println("------------------ !destroyedManually: " + destroyedManually)
@@ -356,7 +416,7 @@ object actors {
     val to = Paths.get(fileError)
     if(Files.exists(to))
       Files.delete(to)
-    Files.move(path, to);
+    Files.move(filePath, to);
 
     var fileName = "./results/";
     if (!err.isEmpty)
@@ -484,7 +544,6 @@ object actors {
   }
 
   def main(args: Array[String]): Unit = {
-
     /* proveravamo argumente komandne linije */
     if(!args.isEmpty){
       if(args.length != 1) println("Dozvoljen je najvise jedan argument komandne linije.")
@@ -515,7 +574,7 @@ object actors {
       import scala.io.StdIn
       var chosenReader = false;
       while (!chosenReader) {
-        println("--------------------------------------------------------------------------------\nOdaberite PDF citac - za odabir unesite broj pod kojim je naveden citac ili putanju do izvrsne datoteke nekog drugog citaca:")
+        println("--------------------------------------------------------------------------------\nOdaberite citac datoteka formata PDF - za odabir unesite broj pod kojim je naveden citac ili putanju do izvrsne datoteke nekog drugog citaca:")
         println("\t\t1) Foxit PDF Reader")
         println("\t\t2) Slim PDF Reader")
         println("\t\t3) Sumatra PDF Reader")
@@ -570,7 +629,7 @@ object actors {
 
       /* ........................ broj worker-a .......................... */
       var maxWorkers = getMaxWorkers()
-      println("Unesite broj Worker objekata: minimalan broj je 1 a maksimalan broj je "+maxWorkers)
+      println("Unesite broj Izvrsilaca: minimalan broj je 1 a maksimalan broj je "+maxWorkers)
       while(numberOfWorkers == 0){
         var in = StdIn.readLine()
         if(in.matches("""\d{1,9}""")){

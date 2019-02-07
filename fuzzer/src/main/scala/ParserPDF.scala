@@ -164,15 +164,15 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     getHeuristicString("commonNames/commonMethodNames.txt")
   }
 */
-  def getHeuristicString(fileName: String): String = {
+  def getHeuristicString(fileHName: String): String = {
     import scala.collection.JavaConverters._
-    //val lines: Array[String] = Source.fromFile("./heuristics/" + fileName, "ISO-8859-1").getLines().toArray
-    var lines: Array[String] = Files.readAllLines(Paths.get("./heuristics/" + fileName), Charset.forName("ISO-8859-1")).asScala.toArray
+    //val lines: Array[String] = Source.fromFile("./heuristics/" + fileHName, "ISO-8859-1").getLines().toArray
+    var lines: Array[String] = Files.readAllLines(Paths.get("./heuristics/" + fileHName), Charset.forName("ISO-8859-1")).asScala.toArray
     /*if(lines.deep != lines2.deep)
       println(" ___________________________________ Nisu jednaki!" + " Velicine: " + lines.size + " " + lines2.size)
     else println("_ Jednaki su!")*/
     val numberOfLines = lines.size
-    //println("\tFajl " + fileName + " ima " + numberOfLines + " linija")
+    //println("\tFajl " + fileHName + " ima " + numberOfLines + " linija")
     val lineNumber = Random.nextInt(numberOfLines)
     //println("\tLine number: " + lineNumber)
     val chosenOne = lines(lineNumber)
@@ -245,7 +245,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
       var streamInBytes = stream.getBytes(Charset.forName("ISO-8859-1"));
       stream = null
       val streamBytesSize = streamInBytes.size
-      val numberOfChanges = Random.nextInt(4) //?!
+      val numberOfChanges = Random.nextInt(4) //
       //println("\t\t ---- Broj parcica koje menjam: " + numberOfChanges)
       //println("\t\t ---- Pre izmena velicina bajtova je: " + streamBytesSize)
       /* pravimo promene onoliko puta kolika je vrednost promenljive numberOfChanges*/
@@ -567,7 +567,7 @@ class ParserPDF(fileName: String, actorNumber: Int) {
     System.gc()
     println("Stream-ova ima (i): " + i + " u actoru:" + actorNumber)
     if(strSize != i)
-      println(" NE SLAZE SE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+      println(" NE SLAZE SE !")
 
     /** .................................... zapisujemo sav novi sadrzaj u novi fajl ....................................... */
     var newContentFile: String = "./fuzzedPDFcorpus/" + actorNumber.toString + "_fuzzed.pdf";
